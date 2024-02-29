@@ -1,9 +1,7 @@
-import { html } from 'hono/html'
 import { jsxRenderer } from 'hono/jsx-renderer'
 
 export const renderer = jsxRenderer(({ children }) => {
-  return html`
-    <!DOCTYPE html>
+  return (
     <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -15,11 +13,11 @@ export const renderer = jsxRenderer(({ children }) => {
       <body>
         <div class="p-4">
           <h1 class="text-4xl font-bold mb-4"><a href="/">Todo</a></h1>
-          ${children}
+          {children}
         </div>
       </body>
     </html>
-  `
+  )
 })
 
 export const AddTodo = () => (

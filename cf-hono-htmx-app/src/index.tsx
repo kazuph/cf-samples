@@ -18,6 +18,7 @@ const app = new Hono<{ Bindings: Bindings }>()
 app.get('*', renderer)
 
 app.get('/', async (c) => {
+  console.log("GET /")
   const { results } = await c.env.DB.prepare(`SELECT id, title FROM Todos;`).all<Todo>()
   const todos = results
   return c.render(
@@ -43,7 +44,7 @@ app.post(
     const { title } = c.req.valid('form')
     // const id = crypto.randomUUID()
     const { results } = await c.env.DB.prepare(`INSERT INTO Todos(title) VALUES(?);`).bind(title).run()
-    console.log({results})
+    console.log({ results })
     return c.html(<Item title={title} id={results.id} />)
   }
 )
