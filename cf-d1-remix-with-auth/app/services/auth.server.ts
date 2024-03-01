@@ -9,6 +9,7 @@ import { GoogleStrategy } from "remix-auth-google";
 import { users } from "../schema";
 import { InferModel } from "drizzle-orm";
 import { createClient } from "~/db.server";
+import { eq, lt, gte, ne } from "drizzle-orm";
 
 export type AuthUser = {
 	id: number;
@@ -46,15 +47,34 @@ export function getAuthenticator(
 			},
 			async ({ profile }) => {
 				const db = createClient(context.DB as D1Database);
+
+				const existingUser = await db
+					.select()
+					.from(users)
+					.where(eq(users.googleProfileId, profile.id))
+					.get();
+
+				if (existingUser) {
+					return {
+						id: existingUser.id,
+						iconUrl: existingUser.iconUrl,
+						displayName: existingUser.displayName,
+					};
+				}
+
 				const newUser: CreateUser = {
 					googleProfileId: profile.id,
 					iconUrl: profile.photos?.[0].value,
 					displayName: profile.displayName,
 					registeredAt: new Date(),
 				};
+
 				const ret = await db.insert(users).values(newUser).returning().get();
+
 				return {
 					id: ret.id,
+					iconUrl: ret.iconUrl,
+					displayName: ret.displayName,
 				};
 			},
 		);
