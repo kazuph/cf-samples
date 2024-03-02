@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-npm run deploy
+npm run release
 
 # Parse .dev.vars and set secrets
 if [[ ! -f .dev.vars ]]; then
@@ -13,5 +13,5 @@ do
   # valueの前後のクオートを削除
   value=$(echo $value | sed -e 's/^"//' -e 's/"$//')
   echo "Setting $name" #: $value"
-  echo $value | wrangler secret put "$name"
+  echo $value | npx wrangler secret put "$name"
 done < .dev.vars

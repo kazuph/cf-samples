@@ -13,7 +13,7 @@
     "start2": "wrangler pages dev --compatibility-date=2023-06-21 ./public",
     "typecheck": "tsc -p . --noEmit",
     "gen:migrate": "drizzle-kit generate:sqlite --out migrations --schema app/schema.ts",
-    "release": "pnpm build:prod && wrangler pages publish ./public"
+    "release": "pnpm build:prod && wrangler pages deploy ./public"
   },
   "dependencies": {
     "@remix-run/cloudflare": "^1.19.3",
