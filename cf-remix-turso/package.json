@@ -20,9 +20,9 @@
 	},
 	"dependencies": {
 		"@libsql/client": "^0.5.2",
-		"@remix-run/cloudflare": "^2.7.2",
-		"@remix-run/cloudflare-pages": "^2.7.2",
-		"@remix-run/react": "^2.7.2",
+		"@remix-run/cloudflare": "^2.8.0",
+		"@remix-run/cloudflare-pages": "^2.8.0",
+		"@remix-run/react": "^2.8.0",
 		"isbot": "^4.1.0",
 		"miniflare": "^3.20231030.4",
 		"react": "^18.2.0",
@@ -31,7 +31,7 @@
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20240222.0",
-		"@remix-run/dev": "^2.7.2",
+		"@remix-run/dev": "^2.8.0",
 		"@types/react": "^18.2.20",
 		"@types/react-dom": "^18.2.7",
 		"@types/uuid": "^9.0.8",
