@@ -1,8 +1,10 @@
-import type { LoaderFunctionArgs, LoaderFunction } from "@remix-run/cloudflare";
-import { users } from '../db/schema';
-import { json, useLoaderData } from "@remix-run/react";
+import type { MetaFunction } from "@remix-run/cloudflare";
 
-import { DB } from "../db/db"; import type { MetaFunction } from "@remix-run/cloudflare";
+import type { LoaderFunctionArgs, LoaderFunction } from "@remix-run/cloudflare";
+import { useLoaderData } from "@remix-run/react";
+
+import { DB } from "../db/db";
+import { users } from '../db/schema';
 
 export const meta: MetaFunction = () => {
   return [
