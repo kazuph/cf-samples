@@ -15,10 +15,9 @@
 		"preview": "npm run build && wrangler pages dev ./build/client",
 		"db:gen": "drizzle-kit generate:sqlite --breakpoints",
 		"db:test": "concurrently 'turso dev --db-file db/local.db' 'npx tsx db/testdata.ts'",
+		"db:test:prod": "NODE_ENV=production npx tsx db/testdata.ts",
 		"db:migrate": "concurrently 'turso dev --db-file db/local.db' 'npx tsx db/migrate.ts'",
-		"db:migrate:prod": "NODE_ENV=production npx tsx db/migrate.ts",
-		"db:push": "concurrently 'turso dev --db-file db/local.db' 'drizzle-kit push:sqlite'",
-		"db:push:prod": "NODE_ENV=production drizzle-kit push:sqlite"
+		"db:migrate:prod": "NODE_ENV=production npx tsx db/migrate.ts"
 	},
 	"dependencies": {
 		"@libsql/client": "^0.5.2",

@@ -6,11 +6,15 @@ import * as dotenv from "dotenv";
 dotenv.config({ path: process.env.NODE_ENV === "production" ? ".env.prod" : ".dev.vars" });
 
 // 環境変数からデータベースの設定を読み込む
-const DB_DRIVER = process.env.DB_DRIVER || "sqlite"; // デフォルトはsqlite
+const DB_DRIVER = process.env.DB_DRIVER || "libsql";
 
 let db: ReturnType<typeof drizzle>;
 
-console.log(DB_DRIVER)
+console.log({
+  env: process.env.NODE_ENV,
+  url: process.env.TURSO_DATABASE_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
 
 if (DB_DRIVER === "turso") {
   // Tursoの設定

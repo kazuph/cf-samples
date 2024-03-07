@@ -33,7 +33,7 @@ async function insertUser() {
     const newUser = await db.insert(users).values({
       id: uuidv4(), // UUIDを生成してidとして使用
       name: '新しいユーザー',
-      email: 'newuser@example.com',
+      email: `newuser-${uuidv4()}@example.com`,
     }).returning(); // SQLiteを使用している場合、挿入された行を返す
 
     console.log('新しいユーザーを追加しました:', newUser);
