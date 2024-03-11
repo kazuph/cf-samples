@@ -20,7 +20,7 @@ export const meta: MetaFunction = () => {
 
 export const loader = async ({ context }: LoaderFunctionArgs) => {
   const db = drizzle(context.cloudflare.env.DB);
-  const res = await db.select().from(users).all() as User[];
+  const res = await db.select().from(users).all();
 
   return { users: res }
 };
