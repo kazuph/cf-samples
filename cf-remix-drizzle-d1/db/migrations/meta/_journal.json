@@ -1,0 +1,27 @@
+{
+  "version": "5",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1709709285471,
+      "tag": "0000_high_red_hulk",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1709709694628,
+      "tag": "0001_wild_magik",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1709713344964,
+      "tag": "0002_melted_blackheart",
+      "breakpoints": true
+    }
+  ]
+}

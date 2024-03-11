@@ -1,0 +1,8 @@
+name = "cf-remix-drizzle-d1"
+compatibility_date = "2024-03-04"
+
+[[ d1_databases ]]
+binding = "DB"
+database_name = "mydb"
+database_id = "63ad84fa-d72f-44a6-8817-bd3273db84b2"
+migrations_dir = "db/migrations"
