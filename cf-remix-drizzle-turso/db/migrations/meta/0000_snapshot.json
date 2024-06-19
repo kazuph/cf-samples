@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "sqlite",
-  "id": "3a432cd2-8aa3-462d-bfaa-def3a16e900c",
+  "id": "6dd05c4f-17a8-4ee3-8267-f7431be0d43d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "users": {
@@ -21,25 +21,18 @@
           "notNull": false,
           "autoincrement": false
         },
-        "name": {
-          "name": "name",
+        "nickname": {
+          "name": "nickname",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "nickname": {
-          "name": "nickname",
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "customerId": {
-          "name": "customerId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "created_at": {
@@ -67,10 +60,10 @@
           ],
           "isUnique": true
         },
-        "users_customerId_unique": {
-          "name": "users_customerId_unique",
+        "users_nickname_unique": {
+          "name": "users_nickname_unique",
           "columns": [
-            "customerId"
+            "nickname"
           ],
           "isUnique": true
         }
