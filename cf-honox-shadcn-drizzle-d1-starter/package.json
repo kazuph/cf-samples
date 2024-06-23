@@ -1,0 +1,47 @@
+{
+	"name": "basic",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build --mode client && vite build",
+		"migration:generate": "drizzle-kit generate",
+		"migration:apply:local": "wrangler d1 migrations apply d1-todo --local",
+		"migration:apply:remote": "wrangler d1 migrations apply d1-todo --remote",
+		"preview": "wrangler pages dev ./dist",
+		"deploy": "$npm_execpath run build && wrangler pages deploy ./dist"
+	},
+	"private": true,
+	"dependencies": {
+		"@hono/react-renderer": "^0.2.0",
+		"@hono/zod-validator": "^0.2.2",
+		"@radix-ui/react-navigation-menu": "^1.2.0",
+		"@radix-ui/react-slot": "^1.1.0",
+		"class-variance-authority": "^0.7.0",
+		"clsx": "^2.1.1",
+		"date-fns": "^3.6.0",
+		"drizzle-orm": "^0.31.2",
+		"drizzle-zod": "^0.5.1",
+		"hono": "^4.4.7",
+		"honox": "^0.1.23",
+		"lucide-react": "^0.376.0",
+		"react": "^18.3.1",
+		"react-day-picker": "^8.10.1",
+		"react-dom": "^18.3.1",
+		"tailwind-merge": "^2.3.0",
+		"tailwindcss-animate": "^1.0.7",
+		"zod": "^3.23.8"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20240620.0",
+		"@hono/vite-cloudflare-pages": "^0.4.1",
+		"@hono/vite-dev-server": "^0.12.2",
+		"@types/react": "^18.3.3",
+		"@types/react-dom": "^18.3.0",
+		"autoprefixer": "^10.4.19",
+		"drizzle-kit": "^0.22.7",
+		"postcss": "^8.4.38",
+		"tailwindcss": "^3.4.4",
+		"vite": "^5.3.1",
+		"wrangler": "^3.61.0"
+	}
+}
