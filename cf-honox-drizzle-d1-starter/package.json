@@ -1,0 +1,30 @@
+{
+	"name": "d1-todo",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"migration:generate": "drizzle-kit generate:sqlite",
+		"migration:apply:local": "wrangler d1 migrations apply d1-todo --local",
+		"migration:apply:remote": "wrangler d1 migrations apply d1-todo --remote",
+		"build": "vite build --mode client && vite build",
+		"preview": "wrangler pages dev ./dist",
+		"deploy": "$npm_execpath run build && wrangler pages deploy ./dist"
+	},
+	"private": true,
+	"dependencies": {
+		"@hono/zod-validator": "^0.2.2",
+		"drizzle-orm": "^0.30.10",
+		"drizzle-zod": "^0.5.1",
+		"hono": "^4.4.7",
+		"honox": "^0.1.23",
+		"zod": "^3.23.8"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20240620.0",
+		"@hono/vite-cloudflare-pages": "^0.2.5",
+		"@hono/vite-dev-server": "^0.11.1",
+		"drizzle-kit": "^0.20.18",
+		"vite": "^5.3.1",
+		"wrangler": "^3.61.0"
+	}
+}
