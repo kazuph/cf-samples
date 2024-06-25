@@ -118,7 +118,7 @@ export default function Todo() {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto mt-10">
+    <div className="w-full max-w-3xl pb-16 mx-auto mt-10">
       <h1 className="mb-4 text-2xl font-bold">Todo List</h1>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(addTodo)} className="flex items-start gap-2 mb-4">
@@ -169,12 +169,16 @@ export default function Todo() {
                 <span
                   className={`flex-grow cursor-pointer ${todo.completed ? 'line-through' : ''}`}
                   onClick={() => startEditing(todo.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && startEditing(todo.id)}
+                  tabIndex={0}
+                  role="button"
                 >
                   {todo.description}
                 </span>
               )}
             </div>
             <button
+              type="button"
               onClick={() => deleteTodo(todo.id)}
               className="ml-2 text-red-500"
             >

@@ -1,0 +1,1922 @@
+## Tree Output
+.gitignore
+README.md
+app/api/[[...route]]/route.ts
+app/favicon.ico
+app/globals.css
+app/layout.tsx
+app/not-found.tsx
+app/page.tsx
+app/schema.ts
+components.json
+components/Features.tsx
+components/Footer.tsx
+components/Header.tsx
+components/Hero.tsx
+components/Pricing.tsx
+components/Todo.tsx
+components/ui/avatar.tsx
+components/ui/button.tsx
+components/ui/card.tsx
+components/ui/checkbox.tsx
+components/ui/dropdown-menu.tsx
+components/ui/form.tsx
+components/ui/input.tsx
+components/ui/label.tsx
+drizzle.config.ts
+env.d.ts
+lib/utils.ts
+next.config.mjs
+package-lock.json
+package.json
+pnpm-lock.yaml
+postcss.config.js
+public/next.svg
+public/vercel.svg
+tailwind.config.ts
+tsconfig.json
+wrangler.toml
+## Source Code
+```file:.gitignore
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# wrangler files
+.wrangler
+.dev.vars
+
+drizzle/migrations/*
+!drizzle/migrations/.gitkeep
+```
+
+```file:README.md
+This is a [Next.js](https://nextjs.org/) project bootstrapped with [`c3`](https://developers.cloudflare.com/pages/get-started/c3).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Cloudflare integration
+
+Besides the `dev` script mentioned above `c3` has added a few extra scripts that allow you to integrate the application with the [Cloudflare Pages](https://pages.cloudflare.com/) environment, these are:
+  - `pages:build` to build the application for Pages using the [`@cloudflare/next-on-pages`](https://github.com/cloudflare/next-on-pages) CLI
+  - `preview` to locally preview your Pages application using the [Wrangler](https://developers.cloudflare.com/workers/wrangler/) CLI
+  - `deploy` to deploy your Pages application using the [Wrangler](https://developers.cloudflare.com/workers/wrangler/) CLI
+
+> __Note:__ while the `dev` script is optimal for local development you should preview your Pages application as well (periodically or before deployments) in order to make sure that it can properly work in the Pages environment (for more details see the [`@cloudflare/next-on-pages` recommended workflow](https://github.com/cloudflare/next-on-pages/blob/05b6256/internal-packages/next-dev/README.md#recommended-workflow))
+
+### Bindings
+
+Cloudflare [Bindings](https://developers.cloudflare.com/pages/functions/bindings/) are what allows you to interact with resources available in the Cloudflare Platform.
+
+You can use bindings during development, when previewing locally your application and of course in the deployed application:
+
+- To use bindings in dev mode you need to define them in the `next.config.js` file under `setupDevBindings`, this mode uses the `next-dev` `@cloudflare/next-on-pages` submodule. For more details see its [documentation](https://github.com/cloudflare/next-on-pages/blob/05b6256/internal-packages/next-dev/README.md).
+
+- To use bindings in the preview mode you need to add them to the `pages:preview` script accordingly to the `wrangler pages dev` command. For more details see its [documentation](https://developers.cloudflare.com/workers/wrangler/commands/#dev-1) or the [Pages Bindings documentation](https://developers.cloudflare.com/pages/functions/bindings/).
+
+- To use bindings in the deployed application you will need to configure them in the Cloudflare [dashboard](https://dash.cloudflare.com/). For more details see the  [Pages Bindings documentation](https://developers.cloudflare.com/pages/functions/bindings/).
+
+#### KV Example
+
+`c3` has added for you an example showing how you can use a KV binding.
+
+In order to enable the example:
+- Search for javascript/typescript lines containing the following comment:
+  ```ts
+  // KV Example:
+  ```
+  and uncomment the commented lines below it.
+- Do the same in the `wrangler.toml` file, where
+  the comment is:
+  ```
+  # KV Example:
+  ```
+- If you're using TypeScript run the `cf-typegen` script to update the `env.d.ts` file:
+  ```bash
+  npm run cf-typegen
+  # or
+  yarn cf-typegen
+  # or
+  pnpm cf-typegen
+  # or
+  bun cf-typegen
+  ```
+
+After doing this you can run the `dev` or `preview` script and visit the `/api/hello` route to see the example in action.
+
+Finally, if you also want to see the example work in the deployed application make sure to add a `MY_KV_NAMESPACE` binding to your Pages application in its [dashboard kv bindings settings section](https://dash.cloudflare.com/?to=/:account/pages/view/:pages-project/settings/functions#kv_namespace_bindings_section). After having configured it make sure to re-deploy your application.
+```
+
+```file:app/api/[[...route]]/route.ts
+import { getRequestContext } from "@cloudflare/next-on-pages";
+import { type Context, Hono } from "hono";
+import { handle } from "hono/vercel";
+import { cors } from "hono/cors";
+
+import {
+	authHandler,
+	initAuthConfig,
+	verifyAuth,
+	type AuthConfig,
+} from "@hono/auth-js";
+import Google from "@auth/core/providers/google";
+
+import { csrf } from "hono/csrf";
+import { secureHeaders } from "hono/secure-headers";
+
+import { zValidator } from "@hono/zod-validator";
+
+import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { users, accounts, sessions, verificationTokens } from "@/app/schema";
+import {
+	todos,
+	createTodoSchema,
+	updateToggleTodoSchema,
+	deleteTodoSchema,
+	updateTodoJsonSchema,
+	updateTodoParamSchema,
+} from "@/app/schema";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/lib/db";
+
+export const runtime = "edge";
+
+type Bindings = {
+	DB: D1Database;
+};
+
+function getAuthConfig(c: Context): AuthConfig {
+	const db = getDb(c);
+	return {
+		adapter: DrizzleAdapter(db, {
+			users,
+			accounts,
+			sessions,
+			verificationTokens,
+		}),
+		secret: getRequestContext().env.NEXTAUTH_SECRET,
+		providers: [
+			Google({
+				clientId: getRequestContext().env.GOOGLE_CLIENT_ID,
+				clientSecret: getRequestContext().env.GOOGLE_CLIENT_SECRET,
+			}),
+		],
+	};
+}
+
+const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
+
+app.use(csrf());
+app.use(secureHeaders());
+// app.use("*", async (c, next) => {
+// 	const userAgent = c.req.header("User-Agent");
+// 	if (!userAgent || !userAgent.includes("Mozilla")) {
+// 		return c.text("Access denied", 403);
+// 	}
+// 	await next();
+// });
+
+app.use("*", initAuthConfig(getAuthConfig));
+app.use("/auth/*", authHandler());
+app.use("/*", verifyAuth());
+
+const route = app
+	.get("/todos", async (c) => {
+		const db = getDb(c);
+		const results = await db.select().from(todos).all();
+		return c.json(results);
+	})
+	.post("/todos", zValidator("json", createTodoSchema), async (c) => {
+		const db = getDb(c);
+		const { description } = c.req.valid("json");
+		const result = await db.insert(todos).values({ description }).returning();
+		return c.json(result[0]);
+	})
+	.put(
+		"/todos/:id/toggle",
+		zValidator("param", updateTodoParamSchema),
+		zValidator("json", updateToggleTodoSchema),
+		async (c) => {
+			const db = getDb(c);
+			const { id } = c.req.valid("param");
+			const { completed } = c.req.valid("json");
+			const result = await db
+				.update(todos)
+				.set({ completed })
+				.where(eq(todos.id, id))
+				.returning();
+			return c.json(result[0]);
+		},
+	)
+	.put(
+		"/todos/:id",
+		zValidator("param", updateTodoParamSchema),
+		zValidator("json", updateTodoJsonSchema),
+		async (c) => {
+			const db = getDb(c);
+			const { id } = c.req.valid("param");
+			const { description } = c.req.valid("json");
+			const result = await db
+				.update(todos)
+				.set({ description })
+				.where(eq(todos.id, id))
+				.returning();
+			return c.json(result[0]);
+		},
+	)
+	.delete("/todos/:id", zValidator("param", deleteTodoSchema), async (c) => {
+		const db = getDb(c);
+		const { id } = c.req.valid("param");
+		await db.delete(todos).where(eq(todos.id, id));
+		return c.json({ success: true });
+	});
+
+export const GET = handle(route);
+export const POST = handle(route);
+export const PUT = handle(route);
+export const DELETE = handle(route);
+
+export type AppType = typeof route;
+```
+
+```file:app/globals.css
+@tailwind base;
+  @tailwind components;
+  @tailwind utilities;
+
+  @layer base {
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 222.2 84% 4.9%;
+
+      --card: 0 0% 100%;
+      --card-foreground: 222.2 84% 4.9%;
+
+      --popover: 0 0% 100%;
+      --popover-foreground: 222.2 84% 4.9%;
+
+      --primary: 222.2 47.4% 11.2%;
+      --primary-foreground: 210 40% 98%;
+
+      --secondary: 210 40% 96.1%;
+      --secondary-foreground: 222.2 47.4% 11.2%;
+
+      --muted: 210 40% 96.1%;
+      --muted-foreground: 215.4 16.3% 46.9%;
+
+      --accent: 210 40% 96.1%;
+      --accent-foreground: 222.2 47.4% 11.2%;
+
+      --destructive: 0 84.2% 60.2%;
+      --destructive-foreground: 210 40% 98%;
+
+      --border: 214.3 31.8% 91.4%;
+      --input: 214.3 31.8% 91.4%;
+      --ring: 222.2 84% 4.9%;
+
+      --radius: 0.5rem;
+    }
+
+    .dark {
+      --background: 222.2 84% 4.9%;
+      --foreground: 210 40% 98%;
+
+      --card: 222.2 84% 4.9%;
+      --card-foreground: 210 40% 98%;
+
+      --popover: 222.2 84% 4.9%;
+      --popover-foreground: 210 40% 98%;
+
+      --primary: 210 40% 98%;
+      --primary-foreground: 222.2 47.4% 11.2%;
+
+      --secondary: 217.2 32.6% 17.5%;
+      --secondary-foreground: 210 40% 98%;
+
+      --muted: 217.2 32.6% 17.5%;
+      --muted-foreground: 215 20.2% 65.1%;
+
+      --accent: 217.2 32.6% 17.5%;
+      --accent-foreground: 210 40% 98%;
+
+      --destructive: 0 62.8% 30.6%;
+      --destructive-foreground: 210 40% 98%;
+
+      --border: 217.2 32.6% 17.5%;
+      --input: 217.2 32.6% 17.5%;
+      --ring: 212.7 26.8% 83.9%;
+    }
+  }
+
+  @layer base {
+    * {
+      @apply border-border;
+    }
+    body {
+      @apply bg-background text-foreground;
+    }
+  }
+```
+
+```file:app/layout.tsx
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { Providers } from "./providers";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        <Providers>
+          <main className="flex flex-col min-h-screen">
+            {children}
+          </main>
+        </Providers>
+      </body>
+    </html>
+  );
+}
+```
+
+```file:app/not-found.tsx
+export const runtime = "edge";
+
+export default function NotFound() {
+  return (
+    <>
+      <title>404: This page could not be found.</title>
+      <div style={styles.error}>
+        <div>
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}`,
+            }}
+          />
+          <h1 className="next-error-h1" style={styles.h1}>
+            404
+          </h1>
+          <div style={styles.desc}>
+            <h2 style={styles.h2}>This page could not be found.</h2>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+const styles = {
+  error: {
+    fontFamily:
+      'system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji"',
+    height: "100vh",
+    textAlign: "center",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  desc: {
+    display: "inline-block",
+  },
+
+  h1: {
+    display: "inline-block",
+    margin: "0 20px 0 0",
+    padding: "0 23px 0 0",
+    fontSize: 24,
+    fontWeight: 500,
+    verticalAlign: "top",
+    lineHeight: "49px",
+  },
+
+  h2: {
+    fontSize: 14,
+    fontWeight: 400,
+    lineHeight: "49px",
+    margin: 0,
+  },
+} as const;
+```
+
+```file:app/page.tsx
+import { getServerSession } from "next-auth/next";
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
+import HomeContent from '@/components/HomeContent';
+
+export default async function Home() {
+  const session = await getServerSession();
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Header />
+      <div className="flex-grow">
+        <HomeContent initialSession={session} />
+      </div>
+      <Footer />
+    </div>
+  );
+}
+```
+
+```file:app/schema.ts
+import { sql } from "drizzle-orm";
+import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import { z } from "zod";
+
+export const users = sqliteTable("user", {
+	id: text("id").notNull().primaryKey(),
+	name: text("name"),
+	email: text("email").notNull(),
+	emailVerified: integer("emailVerified", { mode: "timestamp_ms" }),
+	image: text("image"),
+});
+
+export const accounts = sqliteTable("account", {
+	userId: text("userId")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	type: text("type").$type<"oauth" | "oidc" | "email">().notNull(),
+	provider: text("provider").notNull(),
+	providerAccountId: text("providerAccountId").notNull(),
+	refresh_token: text("refresh_token"),
+	access_token: text("access_token"),
+	expires_at: integer("expires_at"),
+	token_type: text("token_type"),
+	scope: text("scope"),
+	id_token: text("id_token"),
+	session_state: text("session_state"),
+});
+
+export const sessions = sqliteTable("session", {
+	sessionToken: text("sessionToken").notNull().primaryKey(),
+	userId: text("userId")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	expires: integer("expires", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const verificationTokens = sqliteTable("verificationToken", {
+	identifier: text("identifier").notNull(),
+	token: text("token").notNull(),
+	expires: integer("expires", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const todos = sqliteTable("todos", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	description: text("description").notNull(),
+	completed: integer("completed", { mode: "boolean" }).default(false),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+export const insertTodoSchema = createInsertSchema(todos);
+export const selectTodoSchema = createSelectSchema(todos);
+
+export const createTodoSchema = insertTodoSchema.extend({
+	description: z
+		.string()
+		.min(1, "Description is required")
+		.min(3, "Description must be at least 3 characters")
+		.max(100, "Description must be 100 characters or less"),
+});
+
+export const updateToggleTodoSchema = z.object({
+	id: z.coerce.number(),
+	completed: z.boolean(),
+});
+
+export const updateTodoParamSchema = z.object({
+	id: z.coerce.number(),
+});
+
+export const updateTodoJsonSchema = z.object({
+	description: z.string().min(1),
+});
+
+export const deleteTodoSchema = z.object({
+	id: z.coerce.number(),
+});
+```
+
+```file:components/Features.tsx
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+
+const features = [
+  {
+    title: "Task Management",
+    description: "Organize and prioritize your tasks effortlessly.",
+  },
+  {
+    title: "Collaboration Tools",
+    description: "Work seamlessly with your team in real-time.",
+  },
+  {
+    title: "Analytics Dashboard",
+    description: "Gain insights into your productivity and performance.",
+  },
+  {
+    title: "Integration Support",
+    description: "Connect with your favorite tools and services.",
+  },
+];
+
+export default function Features() {
+  return (
+    <section id="features" className="px-6 py-20 bg-gray-50">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="mb-12 text-3xl font-bold text-center">Features</h2>
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">
+          {features.map((feature, index) => (
+            <Card key={index}>
+              <CardHeader>
+                <CardTitle>{feature.title}</CardTitle>
+                <CardDescription>{feature.description}</CardDescription>
+              </CardHeader>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+```
+
+```file:components/Footer.tsx
+'use client';
+
+import Link from 'next/link';
+import { useSession } from "@hono/auth-js/react";
+
+export default function Footer() {
+  const { data: session } = useSession();
+
+  if (session) {
+    return (
+      <footer className="fixed bottom-0 w-full px-6 py-4 bg-white">
+        <div className="text-sm text-center text-gray-400">
+          © 2023 SaaSLogo. All rights reserved.
+        </div>
+      </footer>
+    );
+  }
+
+  return (
+    <footer className="px-6 py-12 text-white bg-gray-800">
+      <div className="grid max-w-6xl grid-cols-1 gap-8 mx-auto md:grid-cols-4">
+        <div>
+          <h3 className="mb-4 text-lg font-semibold">SaaSLogo</h3>
+          <p className="text-sm text-gray-400">Revolutionizing your workflow with cutting-edge SaaS solutions.</p>
+        </div>
+        <div>
+          <h4 className="mb-4 text-lg font-semibold">Product</h4>
+          <ul className="space-y-2">
+            <li><Link href="#features" className="text-sm text-gray-400 hover:text-white">Features</Link></li>
+            <li><Link href="#pricing" className="text-sm text-gray-400 hover:text-white">Pricing</Link></li>
+            <li><Link href="#" className="text-sm text-gray-400 hover:text-white">Integrations</Link></li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="mb-4 text-lg font-semibold">Company</h4>
+          <ul className="space-y-2">
+            <li><Link href="#" className="text-sm text-gray-400 hover:text-white">About Us</Link></li>
+            <li><Link href="#" className="text-sm text-gray-400 hover:text-white">Careers</Link></li>
+            <li><Link href="#" className="text-sm text-gray-400 hover:text-white">Blog</Link></li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="mb-4 text-lg font-semibold">Support</h4>
+          <ul className="space-y-2">
+            <li><Link href="#" className="text-sm text-gray-400 hover:text-white">Help Center</Link></li>
+            <li><Link href="#" className="text-sm text-gray-400 hover:text-white">Contact Us</Link></li>
+            <li><Link href="#" className="text-sm text-gray-400 hover:text-white">Privacy Policy</Link></li>
+          </ul>
+        </div>
+      </div>
+      <div className="pt-8 mt-8 text-sm text-center text-gray-400 border-t border-gray-700">
+        © 2023 SaaSLogo. All rights reserved.
+      </div>
+    </footer>
+  );
+}
+```
+
+```file:components/Header.tsx
+"use client"
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { signOut, useSession } from '@hono/auth-js/react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+
+export default function Header() {
+  const router = useRouter();
+  const { data: session } = useSession();
+
+  const handleAuth = () => {
+    router.push('/auth');
+  };
+
+  const handleLogout = async () => {
+    await signOut({ callbackUrl: '/' });
+  };
+
+  return (
+    <header className="flex items-center justify-between w-full px-6 py-4 bg-white shadow-sm">
+      <Link href="/" className="text-2xl font-bold text-blue-600">SaaSLogo</Link>
+      {!session && (
+        <nav className="hidden space-x-4 md:flex">
+          <Link href="#features" className="text-gray-600 hover:text-blue-600">Features</Link>
+          <Link href="#pricing" className="text-gray-600 hover:text-blue-600">Pricing</Link>
+          <Link href="#contact" className="text-gray-600 hover:text-blue-600">Contact</Link>
+        </nav>
+      )}
+      <div className="flex items-center space-x-4">
+        {session ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="flex items-center space-x-2">
+                <Avatar>
+                  <AvatarImage src={session.user?.image || ''} alt={session.user?.name || ''} />
+                  <AvatarFallback>{session.user?.name?.[0] || 'U'}</AvatarFallback>
+                </Avatar>
+                <span>{session.user?.name || session.user?.email}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={handleLogout}>
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button onClick={handleAuth}>ログイン / サインアップ</Button>
+        )}
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" className="md:hidden">Menu</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem>
+            <Link href="#features">Features</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem>
+            <Link href="#pricing">Pricing</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem>
+            <Link href="#contact">Contact</Link>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </header>
+  );
+}
+```
+
+```file:components/Hero.tsx
+import { Button } from "@/components/ui/button";
+
+export default function Hero() {
+  return (
+    <section className="px-6 py-20 text-white bg-gradient-to-r from-blue-500 to-purple-600">
+      <div className="max-w-4xl mx-auto text-center">
+        <h1 className="mb-6 text-4xl font-bold md:text-6xl">Revolutionize Your Workflow</h1>
+        <p className="mb-8 text-xl">Streamline your tasks, boost productivity, and achieve more with our cutting-edge SaaS platform.</p>
+        <Button size="lg" className="text-blue-600 bg-white hover:bg-blue-50">Get Started for Free</Button>
+      </div>
+    </section>
+  );
+}
+```
+
+```file:components/Pricing.tsx
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+
+const plans = [
+  {
+    name: "Basic",
+    price: "$9.99",
+    features: ["5 Projects", "10 GB Storage", "Basic Support"],
+  },
+  {
+    name: "Pro",
+    price: "$19.99",
+    features: ["Unlimited Projects", "50 GB Storage", "Priority Support", "Advanced Analytics"],
+  },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    features: ["Custom Solutions", "Dedicated Support", "On-premise Options"],
+  },
+];
+
+export default function Pricing() {
+  return (
+    <section id="pricing" className="px-6 py-20">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="mb-12 text-3xl font-bold text-center">Pricing Plans</h2>
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+          {plans.map((plan, index) => (
+            <Card key={index} className="flex flex-col">
+              <CardHeader>
+                <CardTitle>{plan.name}</CardTitle>
+                <CardDescription className="text-2xl font-bold">{plan.price}</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow">
+                <ul className="space-y-2">
+                  {plan.features.map((feature, fIndex) => (
+                    <li key={fIndex} className="flex items-center">
+                      <svg className="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+              <CardFooter>
+                <Button className="w-full">Choose Plan</Button>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+```
+
+```file:components/Todo.tsx
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { createTodoSchema } from '@/app/schema';
+
+import { hc } from "hono/client";
+import type { AppType } from "@/app/api/[[...route]]/route";
+
+export const client = hc<AppType>("/");
+
+interface Todo {
+  id: number;
+  description: string;
+  completed: boolean | null;
+  createdAt: string | null;
+}
+
+interface TodoFormData {
+  description: string;
+}
+
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form"
+
+export default function Todo() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetchTodos();
+  }, []);
+
+  useEffect(() => {
+    if (editingId !== null && editInputRef.current) {
+      editInputRef.current.focus();
+    }
+  }, [editingId]);
+
+  const fetchTodos = async () => {
+    try {
+      const response = await client.api.todos.$get();
+      const data = await response.json();
+      setTodos(data);
+    } catch (error) {
+      console.error('Error fetching todos:', error);
+    }
+  };
+
+  const form = useForm<TodoFormData>({
+    resolver: zodResolver(createTodoSchema),
+    defaultValues: {
+      description: "",
+    },
+  });
+
+  const addTodo = async (data: TodoFormData) => {
+    try {
+      await client.api.todos.$post({
+        json: { description: data.description }
+      });
+      form.reset();
+      fetchTodos();
+    } catch (error) {
+      console.error('Error adding todo:', error);
+    }
+  };
+
+  const startEditing = (id: number) => {
+    setEditingId(id);
+  };
+
+  const finishEditing = async (id: number, newDescription: string) => {
+    try {
+      await client.api.todos[':id'].$put({
+        param: { id: id.toString() },
+        json: { description: newDescription }
+      });
+
+      setEditingId(null);
+      fetchTodos();
+    } catch (error) {
+      console.error('Error updating todo:', error);
+    }
+  };
+
+
+  const toggleTodo = async (id: number, completed: boolean) => {
+    try {
+      await client.api.todos[':id'].toggle.$put({
+        param: { id: id.toString() },
+        json: { id, completed: !completed }
+      });
+      fetchTodos();
+    } catch (error) {
+      console.error('Error toggling todo:', error);
+    }
+  };
+
+  const deleteTodo = async (id: number) => {
+    try {
+      await client.api.todos[':id'].$delete({
+        param: { id: id.toString() },
+      });
+      fetchTodos();
+    } catch (error) {
+      console.error('Error deleting todo:', error);
+    }
+  };
+
+  return (
+    <div className="w-full max-w-3xl pb-16 mx-auto mt-10">
+      <h1 className="mb-4 text-2xl font-bold">Todo List</h1>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(addTodo)} className="flex items-start gap-2 mb-4">
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem className="flex-grow">
+                <FormControl>
+                  <Input
+                    {...field}
+                    placeholder="Add new todo"
+                    className="w-full p-2 border rounded"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <button type="submit" className="self-start px-4 py-2 text-white bg-blue-500 rounded">
+            Add Todo
+          </button>
+        </form>
+      </Form>
+      <ul className="w-full">
+        {todos.map((todo) => (
+          <li key={todo.id} className="flex items-center justify-between w-full p-2 mb-2 border-b">
+            <div className="flex items-center flex-grow">
+              <Checkbox
+                checked={todo.completed ?? false}
+                onCheckedChange={() => toggleTodo(todo.id, todo.completed ?? false)}
+                className="mr-2"
+              />
+              {editingId === todo.id ? (
+                <Input
+                  ref={editInputRef}
+                  type="text"
+                  defaultValue={todo.description}
+                  onBlur={(e) => finishEditing(todo.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      finishEditing(todo.id, e.currentTarget.value);
+                    }
+                  }}
+                  className="flex-grow"
+                />
+              ) : (
+                <span
+                  className={`flex-grow cursor-pointer ${todo.completed ? 'line-through' : ''}`}
+                  onClick={() => startEditing(todo.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && startEditing(todo.id)}
+                  tabIndex={0}
+                  role="button"
+                >
+                  {todo.description}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => deleteTodo(todo.id)}
+              className="ml-2 text-red-500"
+            >
+              Delete
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+```file:components/ui/avatar.tsx
+"use client"
+
+import * as React from "react"
+import * as AvatarPrimitive from "@radix-ui/react-avatar"
+
+import { cn } from "@/lib/utils"
+
+const Avatar = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Root
+    ref={ref}
+    className={cn(
+      "relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full",
+      className
+    )}
+    {...props}
+  />
+))
+Avatar.displayName = AvatarPrimitive.Root.displayName
+
+const AvatarImage = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Image>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Image
+    ref={ref}
+    className={cn("aspect-square h-full w-full", className)}
+    {...props}
+  />
+))
+AvatarImage.displayName = AvatarPrimitive.Image.displayName
+
+const AvatarFallback = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Fallback>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Fallback>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Fallback
+    ref={ref}
+    className={cn(
+      "flex h-full w-full items-center justify-center rounded-full bg-muted",
+      className
+    )}
+    {...props}
+  />
+))
+AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName
+
+export { Avatar, AvatarImage, AvatarFallback }
+```
+
+```file:components/ui/button.tsx
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }
+```
+
+```file:components/ui/card.tsx
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-lg border bg-card text-card-foreground shadow-sm",
+      className
+    )}
+    {...props}
+  />
+))
+Card.displayName = "Card"
+
+const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+))
+CardHeader.displayName = "CardHeader"
+
+const CardTitle = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn(
+      "text-2xl font-semibold leading-none tracking-tight",
+      className
+    )}
+    {...props}
+  />
+))
+CardTitle.displayName = "CardTitle"
+
+const CardDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <p
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+CardDescription.displayName = "CardDescription"
+
+const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+))
+CardContent.displayName = "CardContent"
+
+const CardFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex items-center p-6 pt-0", className)}
+    {...props}
+  />
+))
+CardFooter.displayName = "CardFooter"
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+```
+
+```file:components/ui/checkbox.tsx
+"use client"
+
+import * as React from "react"
+import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
+import { Check } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+const Checkbox = React.forwardRef<
+  React.ElementRef<typeof CheckboxPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <CheckboxPrimitive.Root
+    ref={ref}
+    className={cn(
+      "peer h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+      className
+    )}
+    {...props}
+  >
+    <CheckboxPrimitive.Indicator
+      className={cn("flex items-center justify-center text-current")}
+    >
+      <Check className="h-4 w-4" />
+    </CheckboxPrimitive.Indicator>
+  </CheckboxPrimitive.Root>
+))
+Checkbox.displayName = CheckboxPrimitive.Root.displayName
+
+export { Checkbox }
+```
+
+```file:components/ui/dropdown-menu.tsx
+"use client"
+
+import * as React from "react"
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
+import { Check, ChevronRight, Circle } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+const DropdownMenu = DropdownMenuPrimitive.Root
+
+const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
+
+const DropdownMenuGroup = DropdownMenuPrimitive.Group
+
+const DropdownMenuPortal = DropdownMenuPrimitive.Portal
+
+const DropdownMenuSub = DropdownMenuPrimitive.Sub
+
+const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup
+
+const DropdownMenuSubTrigger = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.SubTrigger>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
+    inset?: boolean
+  }
+>(({ className, inset, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.SubTrigger
+    ref={ref}
+    className={cn(
+      "flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[state=open]:bg-accent",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  >
+    {children}
+    <ChevronRight className="ml-auto h-4 w-4" />
+  </DropdownMenuPrimitive.SubTrigger>
+))
+DropdownMenuSubTrigger.displayName =
+  DropdownMenuPrimitive.SubTrigger.displayName
+
+const DropdownMenuSubContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
+>(({ className, ...props }, ref) => (
+  <DropdownMenuPrimitive.SubContent
+    ref={ref}
+    className={cn(
+      "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+      className
+    )}
+    {...props}
+  />
+))
+DropdownMenuSubContent.displayName =
+  DropdownMenuPrimitive.SubContent.displayName
+
+const DropdownMenuContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
+>(({ className, sideOffset = 4, ...props }, ref) => (
+  <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Content
+      ref={ref}
+      sideOffset={sideOffset}
+      className={cn(
+        "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        className
+      )}
+      {...props}
+    />
+  </DropdownMenuPrimitive.Portal>
+))
+DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
+
+const DropdownMenuItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
+    inset?: boolean
+  }
+>(({ className, inset, ...props }, ref) => (
+  <DropdownMenuPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  />
+))
+DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName
+
+const DropdownMenuCheckboxItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem>
+>(({ className, children, checked, ...props }, ref) => (
+  <DropdownMenuPrimitive.CheckboxItem
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    checked={checked}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <DropdownMenuPrimitive.ItemIndicator>
+        <Check className="h-4 w-4" />
+      </DropdownMenuPrimitive.ItemIndicator>
+    </span>
+    {children}
+  </DropdownMenuPrimitive.CheckboxItem>
+))
+DropdownMenuCheckboxItem.displayName =
+  DropdownMenuPrimitive.CheckboxItem.displayName
+
+const DropdownMenuRadioItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.RadioItem>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem>
+>(({ className, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.RadioItem
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <DropdownMenuPrimitive.ItemIndicator>
+        <Circle className="h-2 w-2 fill-current" />
+      </DropdownMenuPrimitive.ItemIndicator>
+    </span>
+    {children}
+  </DropdownMenuPrimitive.RadioItem>
+))
+DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName
+
+const DropdownMenuLabel = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Label>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & {
+    inset?: boolean
+  }
+>(({ className, inset, ...props }, ref) => (
+  <DropdownMenuPrimitive.Label
+    ref={ref}
+    className={cn(
+      "px-2 py-1.5 text-sm font-semibold",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  />
+))
+DropdownMenuLabel.displayName = DropdownMenuPrimitive.Label.displayName
+
+const DropdownMenuSeparator = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Separator>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
+>(({ className, ...props }, ref) => (
+  <DropdownMenuPrimitive.Separator
+    ref={ref}
+    className={cn("-mx-1 my-1 h-px bg-muted", className)}
+    {...props}
+  />
+))
+DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName
+
+const DropdownMenuShortcut = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span
+      className={cn("ml-auto text-xs tracking-widest opacity-60", className)}
+      {...props}
+    />
+  )
+}
+DropdownMenuShortcut.displayName = "DropdownMenuShortcut"
+
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuGroup,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuRadioGroup,
+}
+```
+
+```file:components/ui/form.tsx
+import * as React from "react"
+import * as LabelPrimitive from "@radix-ui/react-label"
+import { Slot } from "@radix-ui/react-slot"
+import {
+  Controller,
+  ControllerProps,
+  FieldPath,
+  FieldValues,
+  FormProvider,
+  useFormContext,
+} from "react-hook-form"
+
+import { cn } from "@/lib/utils"
+import { Label } from "@/components/ui/label"
+
+const Form = FormProvider
+
+type FormFieldContextValue<
+  TFieldValues extends FieldValues = FieldValues,
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
+> = {
+  name: TName
+}
+
+const FormFieldContext = React.createContext<FormFieldContextValue>(
+  {} as FormFieldContextValue
+)
+
+const FormField = <
+  TFieldValues extends FieldValues = FieldValues,
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
+>({
+  ...props
+}: ControllerProps<TFieldValues, TName>) => {
+  return (
+    <FormFieldContext.Provider value={{ name: props.name }}>
+      <Controller {...props} />
+    </FormFieldContext.Provider>
+  )
+}
+
+const useFormField = () => {
+  const fieldContext = React.useContext(FormFieldContext)
+  const itemContext = React.useContext(FormItemContext)
+  const { getFieldState, formState } = useFormContext()
+
+  const fieldState = getFieldState(fieldContext.name, formState)
+
+  if (!fieldContext) {
+    throw new Error("useFormField should be used within <FormField>")
+  }
+
+  const { id } = itemContext
+
+  return {
+    id,
+    name: fieldContext.name,
+    formItemId: `${id}-form-item`,
+    formDescriptionId: `${id}-form-item-description`,
+    formMessageId: `${id}-form-item-message`,
+    ...fieldState,
+  }
+}
+
+type FormItemContextValue = {
+  id: string
+}
+
+const FormItemContext = React.createContext<FormItemContextValue>(
+  {} as FormItemContextValue
+)
+
+const FormItem = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => {
+  const id = React.useId()
+
+  return (
+    <FormItemContext.Provider value={{ id }}>
+      <div ref={ref} className={cn("space-y-2", className)} {...props} />
+    </FormItemContext.Provider>
+  )
+})
+FormItem.displayName = "FormItem"
+
+const FormLabel = React.forwardRef<
+  React.ElementRef<typeof LabelPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
+>(({ className, ...props }, ref) => {
+  const { error, formItemId } = useFormField()
+
+  return (
+    <Label
+      ref={ref}
+      className={cn(error && "text-destructive", className)}
+      htmlFor={formItemId}
+      {...props}
+    />
+  )
+})
+FormLabel.displayName = "FormLabel"
+
+const FormControl = React.forwardRef<
+  React.ElementRef<typeof Slot>,
+  React.ComponentPropsWithoutRef<typeof Slot>
+>(({ ...props }, ref) => {
+  const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
+
+  return (
+    <Slot
+      ref={ref}
+      id={formItemId}
+      aria-describedby={
+        !error
+          ? `${formDescriptionId}`
+          : `${formDescriptionId} ${formMessageId}`
+      }
+      aria-invalid={!!error}
+      {...props}
+    />
+  )
+})
+FormControl.displayName = "FormControl"
+
+const FormDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => {
+  const { formDescriptionId } = useFormField()
+
+  return (
+    <p
+      ref={ref}
+      id={formDescriptionId}
+      className={cn("text-sm text-muted-foreground", className)}
+      {...props}
+    />
+  )
+})
+FormDescription.displayName = "FormDescription"
+
+const FormMessage = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, children, ...props }, ref) => {
+  const { error, formMessageId } = useFormField()
+  const body = error ? String(error?.message) : children
+
+  if (!body) {
+    return null
+  }
+
+  return (
+    <p
+      ref={ref}
+      id={formMessageId}
+      className={cn("text-sm font-medium text-destructive", className)}
+      {...props}
+    >
+      {body}
+    </p>
+  )
+})
+FormMessage.displayName = "FormMessage"
+
+export {
+  useFormField,
+  Form,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormDescription,
+  FormMessage,
+  FormField,
+}
+```
+
+```file:components/ui/input.tsx
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        className={cn(
+          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          className
+        )}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Input.displayName = "Input"
+
+export { Input }
+```
+
+```file:components/ui/label.tsx
+"use client"
+
+import * as React from "react"
+import * as LabelPrimitive from "@radix-ui/react-label"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const labelVariants = cva(
+  "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+)
+
+const Label = React.forwardRef<
+  React.ElementRef<typeof LabelPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root> &
+    VariantProps<typeof labelVariants>
+>(({ className, ...props }, ref) => (
+  <LabelPrimitive.Root
+    ref={ref}
+    className={cn(labelVariants(), className)}
+    {...props}
+  />
+))
+Label.displayName = LabelPrimitive.Root.displayName
+
+export { Label }
+```
+
+```file:drizzle.config.ts
+import type { Config } from "drizzle-kit";
+
+export default {
+	dialect: "sqlite",
+	schema: "./app/schema.ts",
+	out: "./drizzle/migrations",
+	driver: "d1-http",
+} satisfies Config;
+```
+
+```file:env.d.ts
+// Generated by Wrangler on Tue Jun 25 2024 15:07:18 GMT+0900 (Japan Standard Time)
+// by running `wrangler types --env-interface CloudflareEnv env.d.ts`
+
+interface CloudflareEnv {
+	GOOGLE_CLIENT_ID: string;
+	GOOGLE_CLIENT_SECRET: string;
+	NEXTAUTH_SECRET: string;
+	NEXTAUTH_URL: string;
+	DB: D1Database;
+}
+```
+
+```file:lib/utils.ts
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+```
+
+```file:next.config.mjs
+import { setupDevPlatform } from '@cloudflare/next-on-pages/next-dev';
+
+// Here we use the @cloudflare/next-on-pages next-dev module to allow us to use bindings during local development
+// (when running the application with `next dev`), for more information see:
+// https://github.com/cloudflare/next-on-pages/blob/5712c57ea7/internal-packages/next-dev/README.md
+if (process.env.NODE_ENV === 'development') {
+  await setupDevPlatform();
+}
+
+/** @type {import('next').NextConfig} */
+// const nextConfig = {};
+const nextConfig = {
+  // experimental: {
+  //   runtime: 'edge',
+  // },
+}
+
+export default nextConfig;
+```
+
+```file:postcss.config.js
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+```
+
+```file:tailwind.config.ts
+import type { Config } from "tailwindcss"
+
+const config = {
+  darkMode: ["class"],
+  content: [
+    './pages/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}',
+    './app/**/*.{ts,tsx}',
+    './src/**/*.{ts,tsx}',
+	],
+  prefix: "",
+  theme: {
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: {
+        "2xl": "1400px",
+      },
+    },
+    extend: {
+      colors: {
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+      keyframes: {
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+      },
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+      },
+    },
+  },
+  plugins: [require("tailwindcss-animate")],
+} satisfies Config
+
+export default config```
+
+```file:wrangler.toml
+#:schema node_modules/wrangler/config-schema.json
+name = "cf-next-drizzle-d1-stack"
+compatibility_date = "2024-06-10"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "d1-todo"
+database_id = "3d18d93c-40cc-4257-8014-07be49c91ec3"
+migrations_dir = "drizzle/migrations"
+
+# Automatically place your workloads in an optimal location to minimize latency.
+# If you are running back-end logic in a Pages Function, running it closer to your back-end infrastructure
+# rather than the end user may result in better performance.
+# Docs: https://developers.cloudflare.com/pages/functions/smart-placement/#smart-placement
+# [placement]
+# mode = "smart"
+
+# Variable bindings. These are arbitrary, plaintext strings (similar to environment variables)
+# Docs:
+# - https://developers.cloudflare.com/pages/functions/bindings/#environment-variables
+# Note: Use secrets to store sensitive data.
+# - https://developers.cloudflare.com/pages/functions/bindings/#secrets
+# [vars]
+# MY_VARIABLE = "production_value"
+
+# Bind the Workers AI model catalog. Run machine learning models, powered by serverless GPUs, on Cloudflare’s global network
+# Docs: https://developers.cloudflare.com/pages/functions/bindings/#workers-ai
+# [ai]
+# binding = "AI"
+
+# Bind a D1 database. D1 is Cloudflare’s native serverless SQL database.
+# Docs: https://developers.cloudflare.com/pages/functions/bindings/#d1-databases
+# [[d1_databases]]
+# binding = "MY_DB"
+# database_name = "my-database"
+# database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Bind a Durable Object. Durable objects are a scale-to-zero compute primitive based on the actor model.
+# Durable Objects can live for as long as needed. Use these when you need a long-running "server", such as in realtime apps.
+# Docs: https://developers.cloudflare.com/workers/runtime-apis/durable-objects
+# [[durable_objects.bindings]]
+# name = "MY_DURABLE_OBJECT"
+# class_name = "MyDurableObject"
+# script_name = 'my-durable-object'
+
+# Bind a KV Namespace. Use KV as persistent storage for small key-value pairs.
+# Docs: https://developers.cloudflare.com/pages/functions/bindings/#kv-namespaces
+# KV Example:
+# [[kv_namespaces]]
+# binding = "MY_KV_NAMESPACE"
+# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Bind a Queue producer. Use this binding to schedule an arbitrary task that may be processed later by a Queue consumer.
+# Docs: https://developers.cloudflare.com/pages/functions/bindings/#queue-producers
+# [[queues.producers]]
+# binding = "MY_QUEUE"
+# queue = "my-queue"
+
+# Bind an R2 Bucket. Use R2 to store arbitrarily large blobs of data, such as files.
+# Docs: https://developers.cloudflare.com/pages/functions/bindings/#r2-buckets
+# [[r2_buckets]]
+# binding = "MY_BUCKET"
+# bucket_name = "my-bucket"
+
+# Bind another Worker service. Use this binding to call another Worker without network overhead.
+# Docs: https://developers.cloudflare.com/pages/functions/bindings/#service-bindings
+# [[services]]
+# binding = "MY_SERVICE"
+# service = "my-service"
+
+# To use different bindings for preview and production environments, follow the examples below.
+# When using environment-specific overrides for bindings, ALL bindings must be specified on a per-environment basis.
+# Docs: https://developers.cloudflare.com/pages/functions/wrangler-configuration#environment-specific-overrides
+
+######## PREVIEW environment config ########
+
+# [env.preview.vars]
+# API_KEY = "xyz789"
+
+# [[env.preview.kv_namespaces]]
+# binding = "MY_KV_NAMESPACE"
+# id = "<PREVIEW_NAMESPACE_ID>"
+
+######## PRODUCTION environment config ########
+
+# [env.production.vars]
+# API_KEY = "abc123"
+
+# [[env.production.kv_namespaces]]
+# binding = "MY_KV_NAMESPACE"
+# id = "<PRODUCTION_NAMESPACE_ID>"
+```
+
+## Output File Size
+Output file size: 56548 bytes

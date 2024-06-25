@@ -1,19 +1,15 @@
 import Header from '@/components/Header';
-import Hero from '@/components/Hero';
-import Features from '@/components/Features';
-import Pricing from '@/components/Pricing';
 import Footer from '@/components/Footer';
-import Todo from '@/components/Todo';
+import HomeContent from '@/components/HomeContent';
 
-export default function Home() {
+export default async function Home() {
   return (
-    <main className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen">
       <Header />
-      <Hero />
-      <Todo />
-      <Features />
-      <Pricing />
+      <div className="flex-grow">
+        <HomeContent />
+      </div>
       <Footer />
-    </main>
+    </div>
   );
 }

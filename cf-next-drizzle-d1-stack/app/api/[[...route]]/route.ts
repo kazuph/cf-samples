@@ -1,13 +1,23 @@
-import { Hono } from "hono";
+import { getRequestContext } from "@cloudflare/next-on-pages";
+import { type Context, Hono } from "hono";
 import { handle } from "hono/vercel";
 import { cors } from "hono/cors";
+
+import {
+	authHandler,
+	initAuthConfig,
+	verifyAuth,
+	type AuthConfig,
+} from "@hono/auth-js";
+import Google from "@auth/core/providers/google";
+
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 
-import { getRequestContext } from "@cloudflare/next-on-pages";
 import { zValidator } from "@hono/zod-validator";
-import { drizzle } from "drizzle-orm/d1";
-import { eq } from "drizzle-orm";
+
+import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { users, accounts, sessions, verificationTokens } from "@/app/schema";
 import {
 	todos,
 	createTodoSchema,
@@ -16,6 +26,8 @@ import {
 	updateTodoJsonSchema,
 	updateTodoParamSchema,
 } from "@/app/schema";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/lib/db";
 
 export const runtime = "edge";
 
@@ -23,22 +35,40 @@ type Bindings = {
 	DB: D1Database;
 };
 
-const getDb = (c: any) => {
-	const d1 = getRequestContext().env.DB;
-	return drizzle(d1);
-};
+export function getAuthConfig(c: Context): AuthConfig {
+	const db = getDb(c);
+	return {
+		adapter: DrizzleAdapter(db, {
+			users,
+			accounts,
+			sessions,
+			verificationTokens,
+		}),
+		secret: getRequestContext().env.NEXTAUTH_SECRET,
+		providers: [
+			Google({
+				clientId: getRequestContext().env.GOOGLE_CLIENT_ID,
+				clientSecret: getRequestContext().env.GOOGLE_CLIENT_SECRET,
+			}),
+		],
+	};
+}
 
 const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
 
 app.use(csrf());
 app.use(secureHeaders());
-app.use("*", async (c, next) => {
-	const userAgent = c.req.header("User-Agent");
-	if (!userAgent || !userAgent.includes("Mozilla")) {
-		return c.text("Access denied", 403);
-	}
-	await next();
-});
+// app.use("*", async (c, next) => {
+// 	const userAgent = c.req.header("User-Agent");
+// 	if (!userAgent || !userAgent.includes("Mozilla")) {
+// 		return c.text("Access denied", 403);
+// 	}
+// 	await next();
+// });
+
+app.use("*", initAuthConfig(getAuthConfig));
+app.use("/auth/*", authHandler());
+app.use("/*", verifyAuth());
 
 const route = app
 	.get("/todos", async (c) => {
