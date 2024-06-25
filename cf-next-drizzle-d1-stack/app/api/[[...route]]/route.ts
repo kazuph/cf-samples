@@ -7,6 +7,7 @@ import {
 	authHandler,
 	initAuthConfig,
 	verifyAuth,
+	getAuthUser,
 	type AuthConfig,
 } from "@hono/auth-js";
 import Google from "@auth/core/providers/google";
@@ -26,7 +27,7 @@ import {
 	updateTodoJsonSchema,
 	updateTodoParamSchema,
 } from "@/app/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 
 export const runtime = "edge";
@@ -72,14 +73,32 @@ app.use("/*", verifyAuth());
 
 const route = app
 	.get("/todos", async (c) => {
+		const authUser = c.get("authUser");
+		if (!authUser) return c.json({ error: "Unauthorized" }, 401);
+		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
+
 		const db = getDb(c);
-		const results = await db.select().from(todos).all();
+		const results = await db
+			.select()
+			.from(todos)
+			.where(eq(todos.userId, authUser.user.id))
+			.all();
 		return c.json(results);
 	})
 	.post("/todos", zValidator("json", createTodoSchema), async (c) => {
+		console.log("POST /todos");
+		const authUser = c.get("authUser");
+		console.log("authUser: ", authUser);
+		if (!authUser) return c.json({ error: "Unauthorized" }, 401);
+		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
+
+		console.log("authUser: ", authUser);
 		const db = getDb(c);
 		const { description } = c.req.valid("json");
-		const result = await db.insert(todos).values({ description }).returning();
+		const result = await db
+			.insert(todos)
+			.values({ description, userId: authUser.user.id })
+			.returning();
 		return c.json(result[0]);
 	})
 	.put(
@@ -87,14 +106,21 @@ const route = app
 		zValidator("param", updateTodoParamSchema),
 		zValidator("json", updateToggleTodoSchema),
 		async (c) => {
+			const authUser = c.get("authUser");
+			if (!authUser) return c.json({ error: "Unauthorized" }, 401);
+			if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
+
 			const db = getDb(c);
 			const { id } = c.req.valid("param");
 			const { completed } = c.req.valid("json");
 			const result = await db
 				.update(todos)
 				.set({ completed })
-				.where(eq(todos.id, id))
+				.where(and(eq(todos.id, id), eq(todos.userId, authUser.user.id)))
 				.returning();
+
+			if (result.length === 0)
+				return c.json({ error: "Todo not found or not owned by user" }, 404);
 			return c.json(result[0]);
 		},
 	)
@@ -103,21 +129,38 @@ const route = app
 		zValidator("param", updateTodoParamSchema),
 		zValidator("json", updateTodoJsonSchema),
 		async (c) => {
+			const authUser = c.get("authUser");
+			if (!authUser) return c.json({ error: "Unauthorized" }, 401);
+			if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
+
 			const db = getDb(c);
 			const { id } = c.req.valid("param");
 			const { description } = c.req.valid("json");
 			const result = await db
 				.update(todos)
 				.set({ description })
-				.where(eq(todos.id, id))
+				.where(and(eq(todos.id, id), eq(todos.userId, authUser.user.id)))
 				.returning();
+
+			if (result.length === 0)
+				return c.json({ error: "Todo not found or not owned by user" }, 404);
 			return c.json(result[0]);
 		},
 	)
 	.delete("/todos/:id", zValidator("param", deleteTodoSchema), async (c) => {
+		const authUser = c.get("authUser");
+		if (!authUser) return c.json({ error: "Unauthorized" }, 401);
+		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
+
 		const db = getDb(c);
 		const { id } = c.req.valid("param");
-		await db.delete(todos).where(eq(todos.id, id));
+		const result = await db
+			.delete(todos)
+			.where(and(eq(todos.id, id), eq(todos.userId, authUser.user.id)))
+			.returning();
+
+		if (result.length === 0)
+			return c.json({ error: "Todo not found or not owned by user" }, 404);
 		return c.json({ success: true });
 	});
 

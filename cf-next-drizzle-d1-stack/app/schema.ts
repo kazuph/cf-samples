@@ -44,16 +44,29 @@ export const verificationTokens = sqliteTable("verificationToken", {
 export const todos = sqliteTable("todos", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	description: text("description").notNull(),
+	userId: text("user_id")
+		.notNull()
+		.references(() => users.id),
 	completed: integer("completed", { mode: "boolean" }).default(false),
 	createdAt: integer("created_at", { mode: "timestamp" }).default(
 		sql`(strftime('%s', 'now'))`,
 	),
 });
 
-export const insertTodoSchema = createInsertSchema(todos);
+export const insertTodoSchema = createInsertSchema(todos).extend({
+	description: z
+		.string()
+		.min(1, "Description is required")
+		.min(3, "Description must be at least 3 characters")
+		.max(100, "Description must be 100 characters or less"),
+});
 export const selectTodoSchema = createSelectSchema(todos);
 
-export const createTodoSchema = insertTodoSchema.extend({
+// export const createTodoSchema = insertTodoSchema.omit({
+// 	id: true,
+// 	createdAt: true,
+// });
+export const createTodoSchema = z.object({
 	description: z
 		.string()
 		.min(1, "Description is required")

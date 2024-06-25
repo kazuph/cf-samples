@@ -44,7 +44,6 @@ async function getServerSession(req: NextRequest) {
 }
 
 export async function middleware(request: NextRequest) {
-	console.log("middleware", request.nextUrl.pathname);
 	const session = await getServerSession(request);
 
 	// ルートパスの処理

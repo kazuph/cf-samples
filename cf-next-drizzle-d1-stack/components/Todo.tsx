@@ -6,9 +6,18 @@ import { Input } from "@/components/ui/input"
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createTodoSchema } from '@/app/schema';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form"
 
 import { hc } from "hono/client";
 import type { AppType } from "@/app/api/[[...route]]/route";
+import { useSession } from '@hono/auth-js/react';
 
 export const client = hc<AppType>("/");
 
@@ -23,22 +32,19 @@ interface TodoFormData {
   description: string;
 }
 
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "@/components/ui/form"
-
 export default function Todo() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
+  const { data: session } = useSession();
+
   useEffect(() => {
-    fetchTodos();
-  }, []);
+    if (session) {
+      fetchTodos();
+    } else {
+    }
+  }, [session]);
 
   useEffect(() => {
     if (editingId !== null && editInputRef.current) {
@@ -64,6 +70,7 @@ export default function Todo() {
   });
 
   const addTodo = async (data: TodoFormData) => {
+    console.log(`addToDo: ${data.description}`)
     try {
       await client.api.todos.$post({
         json: { description: data.description }
@@ -121,7 +128,9 @@ export default function Todo() {
     <div className="w-full max-w-3xl pb-16 mx-auto mt-10">
       <h1 className="mb-4 text-2xl font-bold">Todo List</h1>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(addTodo)} className="flex items-start gap-2 mb-4">
+        <form onSubmit={
+          form.handleSubmit(addTodo)
+        } className="flex items-start gap-2 mb-4">
           <FormField
             control={form.control}
             name="description"
@@ -130,10 +139,13 @@ export default function Todo() {
                 <FormControl>
                   <Input
                     {...field}
-                    placeholder="Add new todo"
+                    placeholder="タスクを追加"
                     className="w-full p-2 border rounded"
                   />
                 </FormControl>
+                <FormDescription>
+                  今日やることを教えてね！
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -187,6 +199,6 @@ export default function Todo() {
           </li>
         ))}
       </ul>
-    </div>
+    </div >
   );
 }
