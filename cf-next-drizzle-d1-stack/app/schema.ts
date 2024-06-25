@@ -19,12 +19,21 @@ export const createTodoSchema = insertTodoSchema.extend({
 	description: z
 		.string()
 		.min(1, "Description is required")
+		.min(3, "Description must be at least 3 characters")
 		.max(100, "Description must be 100 characters or less"),
 });
 
-export const updateTodoSchema = z.object({
+export const updateToggleTodoSchema = z.object({
 	id: z.coerce.number(),
 	completed: z.boolean(),
+});
+
+export const updateTodoParamSchema = z.object({
+	id: z.coerce.number(),
+});
+
+export const updateTodoJsonSchema = z.object({
+	description: z.string().min(1),
 });
 
 export const deleteTodoSchema = z.object({
