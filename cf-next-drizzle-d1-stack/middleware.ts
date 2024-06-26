@@ -45,29 +45,23 @@ export async function getServerSession(req: NextRequest) {
 
 export async function middleware(request: NextRequest) {
 	const session = await getServerSession(request);
+	const { pathname } = request.nextUrl;
 
-	// ルートパスの処理
-	if (request.nextUrl.pathname === "/") {
-		if (session) {
-			// 認証済みの場合、ダッシュボードにリダイレクト
-			return NextResponse.redirect(new URL("/dashboard", request.url));
-		} else {
-			// 未認証の場合、ホームページを表示（デフォルトの動作）
-			return NextResponse.next();
-		}
+	if (pathname.startsWith("/api")) {
+		return NextResponse.next();
 	}
 
-	// 保護されたルートのリスト
-	const protectedRoutes = ["/dashboard", "/profile", "/settings"];
+	if (session && pathname === "/") {
+		return NextResponse.redirect(new URL("/dashboard", request.url));
+	}
 
 	if (
 		!session &&
-		protectedRoutes.some((route) => request.nextUrl.pathname.startsWith(route))
+		pathname !== "/" &&
+		pathname !== "/auth" &&
+		pathname !== "/404"
 	) {
-		// 未認証で保護されたルートにアクセスした場合、サインインページにリダイレクト
-		const signInUrl = new URL("/auth", request.url);
-		signInUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
-		return NextResponse.redirect(signInUrl);
+		return NextResponse.redirect(new URL("/404", request.url));
 	}
 
 	return NextResponse.next();
