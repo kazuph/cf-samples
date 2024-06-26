@@ -4,7 +4,7 @@ import { Auth } from "@auth/core";
 import type { Session } from "@auth/core/types";
 import type { JWT } from "@auth/core/jwt";
 import type { AdapterUser } from "@auth/core/adapters";
-import { getAuthConfig } from "@/app/api/[[...route]]/route"; // 認証設定をインポート
+import { getAuthConfig } from "@/lib/auth";
 
 type AuthUser = {
 	session: Session;

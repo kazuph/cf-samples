@@ -23,6 +23,7 @@ export const client = hc<AppType>("/");
 interface Todo {
   id: number;
   description: string;
+  userId: string;
   completed: boolean | null;
   createdAt: string | null;
 }
@@ -42,7 +43,11 @@ export default function Todo() {
     if (!session) return;
     try {
       const response = await client.api.todos.$get();
-      const data = await response.json();
+      const data: Todo[] | { error: string } = await response.json();
+      if ('error' in data) {
+        console.error('Error fetching todos:', data.error);
+        return;
+      }
       setTodos(data);
     } catch (error) {
       console.error('Error fetching todos:', error);

@@ -1,23 +1,13 @@
-import { getRequestContext } from "@cloudflare/next-on-pages";
 import { Hono } from "hono";
 import { handle } from "hono/vercel";
 import { cors } from "hono/cors";
 
-import {
-	authHandler,
-	initAuthConfig,
-	verifyAuth,
-	type AuthConfig,
-} from "@hono/auth-js";
-import Google from "@auth/core/providers/google";
+import { authHandler, initAuthConfig, verifyAuth } from "@hono/auth-js";
 
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
-
 import { zValidator } from "@hono/zod-validator";
 
-import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { users, accounts, sessions, verificationTokens } from "@/app/schema";
 import {
 	todos,
 	createTodoSchema,
@@ -28,26 +18,13 @@ import {
 } from "@/app/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
+import { getAuthConfig } from "@/lib/auth";
 
 export const runtime = "edge";
 
 type Bindings = {
 	DB: D1Database;
 };
-
-export function getAuthConfig(): AuthConfig {
-	const db = getDb();
-	return {
-		adapter: DrizzleAdapter(db),
-		secret: getRequestContext().env.NEXTAUTH_SECRET,
-		providers: [
-			Google({
-				clientId: getRequestContext().env.GOOGLE_CLIENT_ID,
-				clientSecret: getRequestContext().env.GOOGLE_CLIENT_SECRET,
-			}),
-		],
-	};
-}
 
 const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
 
@@ -80,13 +57,10 @@ const route = app
 		return c.json(results);
 	})
 	.post("/todos", zValidator("json", createTodoSchema), async (c) => {
-		console.log("POST /todos");
 		const authUser = c.get("authUser");
-		console.log("authUser: ", authUser);
 		if (!authUser) return c.json({ error: "Unauthorized" }, 401);
 		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
 
-		console.log("authUser: ", authUser);
 		const db = getDb();
 		const { description } = c.req.valid("json");
 		const result = await db
