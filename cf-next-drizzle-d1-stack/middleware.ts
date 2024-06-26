@@ -14,7 +14,7 @@ type AuthUser = {
 
 export async function getServerSession(req: NextRequest) {
 	const config = getAuthConfig();
-	config.secret ??= process.env.AUTH_SECRET;
+	config.secret ??= process.env.NEXTAUTH_SECRET;
 	config.basePath ??= "/api/auth";
 	config.trustHost = true;
 	const origin = process.env.NEXTAUTH_URL ?? req.nextUrl.origin;
