@@ -2,3 +2,7 @@
 .wrangler/
 .dev.vars
 
+# misc
+.*DS_Store
+*.pem
+*.txt

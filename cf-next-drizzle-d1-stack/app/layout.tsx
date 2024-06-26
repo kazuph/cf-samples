@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { Suspense } from 'react';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,11 +19,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Providers>
-          <main className="flex flex-col min-h-screen">
+        <main className="flex flex-col min-h-screen">
+          <Providers>
             {children}
-          </main>
-        </Providers>
+          </Providers>
+        </main>
       </body>
     </html>
   );

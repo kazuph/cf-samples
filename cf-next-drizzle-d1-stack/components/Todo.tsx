@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { useForm } from "react-hook-form";
@@ -9,7 +9,6 @@ import { createTodoSchema } from '@/app/schema';
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormMessage,
@@ -39,20 +38,8 @@ export default function Todo() {
 
   const { data: session } = useSession();
 
-  useEffect(() => {
-    if (session) {
-      fetchTodos();
-    } else {
-    }
-  }, [session]);
-
-  useEffect(() => {
-    if (editingId !== null && editInputRef.current) {
-      editInputRef.current.focus();
-    }
-  }, [editingId]);
-
-  const fetchTodos = async () => {
+  const fetchTodos = useCallback(async () => {
+    if (!session) return;
     try {
       const response = await client.api.todos.$get();
       const data = await response.json();
@@ -60,7 +47,19 @@ export default function Todo() {
     } catch (error) {
       console.error('Error fetching todos:', error);
     }
-  };
+  }, [session]);
+
+  useEffect(() => {
+    if (session) {
+      fetchTodos();
+    }
+  }, [session, fetchTodos]);
+
+  useEffect(() => {
+    if (editingId !== null && editInputRef.current) {
+      editInputRef.current.focus();
+    }
+  }, [editingId]);
 
   const form = useForm<TodoFormData>({
     resolver: zodResolver(createTodoSchema),
@@ -70,7 +69,7 @@ export default function Todo() {
   });
 
   const addTodo = async (data: TodoFormData) => {
-    console.log(`addToDo: ${data.description}`)
+    if (!session) return;
     try {
       await client.api.todos.$post({
         json: { description: data.description }
@@ -87,6 +86,7 @@ export default function Todo() {
   };
 
   const finishEditing = async (id: number, newDescription: string) => {
+    if (!session) return;
     try {
       await client.api.todos[':id'].$put({
         param: { id: id.toString() },
@@ -100,8 +100,8 @@ export default function Todo() {
     }
   };
 
-
   const toggleTodo = async (id: number, completed: boolean) => {
+    if (!session) return;
     try {
       await client.api.todos[':id'].toggle.$put({
         param: { id: id.toString() },
@@ -114,6 +114,7 @@ export default function Todo() {
   };
 
   const deleteTodo = async (id: number) => {
+    if (!session) return;
     try {
       await client.api.todos[':id'].$delete({
         param: { id: id.toString() },
@@ -124,13 +125,15 @@ export default function Todo() {
     }
   };
 
+  if (!session) {
+    return null; // or a loading indicator
+  }
+
   return (
     <div className="w-full max-w-3xl pb-16 mx-auto mt-10">
       <h1 className="mb-4 text-2xl font-bold">Todo List</h1>
       <Form {...form}>
-        <form onSubmit={
-          form.handleSubmit(addTodo)
-        } className="flex items-start gap-2 mb-4">
+        <form onSubmit={form.handleSubmit(addTodo)} className="flex items-start gap-2 mb-4">
           <FormField
             control={form.control}
             name="description"
@@ -143,9 +146,6 @@ export default function Todo() {
                     className="w-full p-2 border rounded"
                   />
                 </FormControl>
-                <FormDescription>
-                  今日やることを教えてね！
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -199,6 +199,6 @@ export default function Todo() {
           </li>
         ))}
       </ul>
-    </div >
+    </div>
   );
 }

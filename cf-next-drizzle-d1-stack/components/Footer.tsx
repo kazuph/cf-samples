@@ -1,21 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useSession } from "@hono/auth-js/react";
+import { usePathname } from 'next/navigation';
 
-export default function Footer() {
-  const { data: session } = useSession();
+function SimpleFooter() {
+  return (
+    <footer className="fixed bottom-0 w-full px-6 py-4 bg-white">
+      <div className="text-sm text-center text-gray-400">
+        © 2023 SaaSLogo. All rights reserved.
+      </div>
+    </footer>
+  );
+}
 
-  if (session) {
-    return (
-      <footer className="fixed bottom-0 w-full px-6 py-4 bg-white">
-        <div className="text-sm text-center text-gray-400">
-          © 2023 SaaSLogo. All rights reserved.
-        </div>
-      </footer>
-    );
-  }
-
+function DetailedFooter() {
   return (
     <footer className="px-6 py-12 text-white bg-gray-800">
       <div className="grid max-w-6xl grid-cols-1 gap-8 mx-auto md:grid-cols-4">
@@ -53,4 +51,14 @@ export default function Footer() {
       </div>
     </footer>
   );
+}
+
+export default function Footer() {
+  const pathname = usePathname();
+
+  if (pathname === '/') {
+    return <DetailedFooter />;
+  }
+
+  return <SimpleFooter />;
 }

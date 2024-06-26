@@ -12,7 +12,7 @@ type AuthUser = {
 	user?: AdapterUser;
 };
 
-async function getServerSession(req: NextRequest) {
+export async function getServerSession(req: NextRequest) {
 	const config = getAuthConfig();
 	config.secret ??= process.env.AUTH_SECRET;
 	config.basePath ??= "/api/auth";
@@ -65,7 +65,7 @@ export async function middleware(request: NextRequest) {
 		protectedRoutes.some((route) => request.nextUrl.pathname.startsWith(route))
 	) {
 		// 未認証で保護されたルートにアクセスした場合、サインインページにリダイレクト
-		const signInUrl = new URL("/signin", request.url);
+		const signInUrl = new URL("/auth", request.url);
 		signInUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
 		return NextResponse.redirect(signInUrl);
 	}

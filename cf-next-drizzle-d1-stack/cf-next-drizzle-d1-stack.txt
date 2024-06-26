@@ -2,17 +2,23 @@
 .gitignore
 README.md
 app/api/[[...route]]/route.ts
+app/auth/page.tsx
+app/dashboard/page.tsx
 app/favicon.ico
 app/globals.css
 app/layout.tsx
 app/not-found.tsx
 app/page.tsx
+app/providers.tsx
 app/schema.ts
+cf-next-drizzle-d1-stack.txt
 components.json
+components/Auth.tsx
 components/Features.tsx
 components/Footer.tsx
 components/Header.tsx
 components/Hero.tsx
+components/HomeContent.tsx
 components/Pricing.tsx
 components/Todo.tsx
 components/ui/avatar.tsx
@@ -25,7 +31,9 @@ components/ui/input.tsx
 components/ui/label.tsx
 drizzle.config.ts
 env.d.ts
+lib/db.ts
 lib/utils.ts
+middleware.ts
 next.config.mjs
 package-lock.json
 package.json
@@ -67,6 +75,7 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.dev.vars
 
 # vercel
 .vercel
@@ -156,7 +165,7 @@ Finally, if you also want to see the example work in the deployed application ma
 
 ```file:app/api/[[...route]]/route.ts
 import { getRequestContext } from "@cloudflare/next-on-pages";
-import { type Context, Hono } from "hono";
+import { Hono } from "hono";
 import { handle } from "hono/vercel";
 import { cors } from "hono/cors";
 
@@ -183,7 +192,7 @@ import {
 	updateTodoJsonSchema,
 	updateTodoParamSchema,
 } from "@/app/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 
 export const runtime = "edge";
@@ -192,15 +201,10 @@ type Bindings = {
 	DB: D1Database;
 };
 
-function getAuthConfig(c: Context): AuthConfig {
-	const db = getDb(c);
+export function getAuthConfig(): AuthConfig {
+	const db = getDb();
 	return {
-		adapter: DrizzleAdapter(db, {
-			users,
-			accounts,
-			sessions,
-			verificationTokens,
-		}),
+		adapter: DrizzleAdapter(db),
 		secret: getRequestContext().env.NEXTAUTH_SECRET,
 		providers: [
 			Google({
@@ -229,14 +233,32 @@ app.use("/*", verifyAuth());
 
 const route = app
 	.get("/todos", async (c) => {
-		const db = getDb(c);
-		const results = await db.select().from(todos).all();
+		const authUser = c.get("authUser");
+		if (!authUser) return c.json({ error: "Unauthorized" }, 401);
+		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
+
+		const db = getDb();
+		const results = await db
+			.select()
+			.from(todos)
+			.where(eq(todos.userId, authUser.user.id))
+			.all();
 		return c.json(results);
 	})
 	.post("/todos", zValidator("json", createTodoSchema), async (c) => {
-		const db = getDb(c);
+		console.log("POST /todos");
+		const authUser = c.get("authUser");
+		console.log("authUser: ", authUser);
+		if (!authUser) return c.json({ error: "Unauthorized" }, 401);
+		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
+
+		console.log("authUser: ", authUser);
+		const db = getDb();
 		const { description } = c.req.valid("json");
-		const result = await db.insert(todos).values({ description }).returning();
+		const result = await db
+			.insert(todos)
+			.values({ description, userId: authUser.user.id })
+			.returning();
 		return c.json(result[0]);
 	})
 	.put(
@@ -244,14 +266,21 @@ const route = app
 		zValidator("param", updateTodoParamSchema),
 		zValidator("json", updateToggleTodoSchema),
 		async (c) => {
-			const db = getDb(c);
+			const authUser = c.get("authUser");
+			if (!authUser) return c.json({ error: "Unauthorized" }, 401);
+			if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
+
+			const db = getDb();
 			const { id } = c.req.valid("param");
 			const { completed } = c.req.valid("json");
 			const result = await db
 				.update(todos)
 				.set({ completed })
-				.where(eq(todos.id, id))
+				.where(and(eq(todos.id, id), eq(todos.userId, authUser.user.id)))
 				.returning();
+
+			if (result.length === 0)
+				return c.json({ error: "Todo not found or not owned by user" }, 404);
 			return c.json(result[0]);
 		},
 	)
@@ -260,21 +289,38 @@ const route = app
 		zValidator("param", updateTodoParamSchema),
 		zValidator("json", updateTodoJsonSchema),
 		async (c) => {
-			const db = getDb(c);
+			const authUser = c.get("authUser");
+			if (!authUser) return c.json({ error: "Unauthorized" }, 401);
+			if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
+
+			const db = getDb();
 			const { id } = c.req.valid("param");
 			const { description } = c.req.valid("json");
 			const result = await db
 				.update(todos)
 				.set({ description })
-				.where(eq(todos.id, id))
+				.where(and(eq(todos.id, id), eq(todos.userId, authUser.user.id)))
 				.returning();
+
+			if (result.length === 0)
+				return c.json({ error: "Todo not found or not owned by user" }, 404);
 			return c.json(result[0]);
 		},
 	)
 	.delete("/todos/:id", zValidator("param", deleteTodoSchema), async (c) => {
-		const db = getDb(c);
+		const authUser = c.get("authUser");
+		if (!authUser) return c.json({ error: "Unauthorized" }, 401);
+		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
+
+		const db = getDb();
 		const { id } = c.req.valid("param");
-		await db.delete(todos).where(eq(todos.id, id));
+		const result = await db
+			.delete(todos)
+			.where(and(eq(todos.id, id), eq(todos.userId, authUser.user.id)))
+			.returning();
+
+		if (result.length === 0)
+			return c.json({ error: "Todo not found or not owned by user" }, 404);
 		return c.json({ success: true });
 	});
 
@@ -284,6 +330,38 @@ export const PUT = handle(route);
 export const DELETE = handle(route);
 
 export type AppType = typeof route;
+```
+
+```file:app/auth/page.tsx
+'use client';
+
+import Auth from '@/components/Auth';
+
+export default function AuthPage() {
+  return (
+    <div className="container px-4 py-8 mx-auto">
+      <Auth />
+    </div>
+  );
+}
+```
+
+```file:app/dashboard/page.tsx
+import Header from '@/components/Header';
+import Todo from '@/components/Todo';
+import Footer from '@/components/Footer';
+
+export default function Dashboard() {
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Header />
+      <main className="container flex-grow px-4 py-8 mx-auto">
+        <Todo />
+      </main>
+      <Footer />
+    </div>
+  );
+}
 ```
 
 ```file:app/globals.css
@@ -459,23 +537,34 @@ const styles = {
 ```
 
 ```file:app/page.tsx
-import { getServerSession } from "next-auth/next";
+import { getServerSession } from "@/lib/auth";
+import { redirect } from 'next/navigation';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import HomeContent from '@/components/HomeContent';
 
-export default async function Home() {
-  const session = await getServerSession();
+export const runtime = "edge";
 
+export default async function Home() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
       <div className="flex-grow">
-        <HomeContent initialSession={session} />
+        <HomeContent />
       </div>
       <Footer />
     </div>
   );
+}
+```
+
+```file:app/providers.tsx
+'use client';
+
+import { SessionProvider } from "@hono/auth-js/react";
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return <SessionProvider>{children}</SessionProvider>;
 }
 ```
 
@@ -526,16 +615,29 @@ export const verificationTokens = sqliteTable("verificationToken", {
 export const todos = sqliteTable("todos", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	description: text("description").notNull(),
+	userId: text("user_id")
+		.notNull()
+		.references(() => users.id),
 	completed: integer("completed", { mode: "boolean" }).default(false),
 	createdAt: integer("created_at", { mode: "timestamp" }).default(
 		sql`(strftime('%s', 'now'))`,
 	),
 });
 
-export const insertTodoSchema = createInsertSchema(todos);
+export const insertTodoSchema = createInsertSchema(todos).extend({
+	description: z
+		.string()
+		.min(1, "Description is required")
+		.min(3, "Description must be at least 3 characters")
+		.max(100, "Description must be 100 characters or less"),
+});
 export const selectTodoSchema = createSelectSchema(todos);
 
-export const createTodoSchema = insertTodoSchema.extend({
+// export const createTodoSchema = insertTodoSchema.omit({
+// 	id: true,
+// 	createdAt: true,
+// });
+export const createTodoSchema = z.object({
 	description: z
 		.string()
 		.min(1, "Description is required")
@@ -559,6 +661,28 @@ export const updateTodoJsonSchema = z.object({
 export const deleteTodoSchema = z.object({
 	id: z.coerce.number(),
 });
+```
+
+```file:components/Auth.tsx
+'use client';
+
+import { signIn } from '@hono/auth-js/react';
+import { Button } from '@/components/ui/button';
+
+export default function Auth() {
+  const handleGoogleSignIn = () => {
+    signIn('google', { callbackUrl: '/' });
+  };
+
+  return (
+    <div className="w-full max-w-md mx-auto mt-10">
+      <h2 className="mb-6 text-2xl font-bold text-center">ログイン / サインアップ</h2>
+      <Button onClick={handleGoogleSignIn} className="w-full">
+        Googleでログイン / サインアップ
+      </Button>
+    </div>
+  );
+}
 ```
 
 ```file:components/Features.tsx
@@ -760,6 +884,22 @@ export default function Hero() {
 }
 ```
 
+```file:components/HomeContent.tsx
+import Hero from '@/components/Hero';
+import Features from '@/components/Features';
+import Pricing from '@/components/Pricing';
+
+export default function HomeContent() {
+  return (
+    <>
+      <Hero />
+      <Features />
+      <Pricing />
+    </>
+  );
+}
+```
+
 ```file:components/Pricing.tsx
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -817,17 +957,25 @@ export default function Pricing() {
 ```
 
 ```file:components/Todo.tsx
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createTodoSchema } from '@/app/schema';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form"
 
 import { hc } from "hono/client";
 import type { AppType } from "@/app/api/[[...route]]/route";
+import { useSession } from '@hono/auth-js/react';
 
 export const client = hc<AppType>("/");
 
@@ -842,30 +990,15 @@ interface TodoFormData {
   description: string;
 }
 
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "@/components/ui/form"
-
 export default function Todo() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetchTodos();
-  }, []);
+  const { data: session } = useSession();
 
-  useEffect(() => {
-    if (editingId !== null && editInputRef.current) {
-      editInputRef.current.focus();
-    }
-  }, [editingId]);
-
-  const fetchTodos = async () => {
+  const fetchTodos = useCallback(async () => {
+    if (!session) return;
     try {
       const response = await client.api.todos.$get();
       const data = await response.json();
@@ -873,7 +1006,19 @@ export default function Todo() {
     } catch (error) {
       console.error('Error fetching todos:', error);
     }
-  };
+  }, [session]);
+
+  useEffect(() => {
+    if (session) {
+      fetchTodos();
+    }
+  }, [session, fetchTodos]);
+
+  useEffect(() => {
+    if (editingId !== null && editInputRef.current) {
+      editInputRef.current.focus();
+    }
+  }, [editingId]);
 
   const form = useForm<TodoFormData>({
     resolver: zodResolver(createTodoSchema),
@@ -883,6 +1028,7 @@ export default function Todo() {
   });
 
   const addTodo = async (data: TodoFormData) => {
+    if (!session) return;
     try {
       await client.api.todos.$post({
         json: { description: data.description }
@@ -899,6 +1045,7 @@ export default function Todo() {
   };
 
   const finishEditing = async (id: number, newDescription: string) => {
+    if (!session) return;
     try {
       await client.api.todos[':id'].$put({
         param: { id: id.toString() },
@@ -912,8 +1059,8 @@ export default function Todo() {
     }
   };
 
-
   const toggleTodo = async (id: number, completed: boolean) => {
+    if (!session) return;
     try {
       await client.api.todos[':id'].toggle.$put({
         param: { id: id.toString() },
@@ -926,6 +1073,7 @@ export default function Todo() {
   };
 
   const deleteTodo = async (id: number) => {
+    if (!session) return;
     try {
       await client.api.todos[':id'].$delete({
         param: { id: id.toString() },
@@ -935,6 +1083,10 @@ export default function Todo() {
       console.error('Error deleting todo:', error);
     }
   };
+
+  if (!session) {
+    return null; // or a loading indicator
+  }
 
   return (
     <div className="w-full max-w-3xl pb-16 mx-auto mt-10">
@@ -949,7 +1101,7 @@ export default function Todo() {
                 <FormControl>
                   <Input
                     {...field}
-                    placeholder="Add new todo"
+                    placeholder="タスクを追加"
                     className="w-full p-2 border rounded"
                   />
                 </FormControl>
@@ -1678,14 +1830,49 @@ export { Label }
 ```
 
 ```file:drizzle.config.ts
-import type { Config } from "drizzle-kit";
+// drizzle.config.ts
 
-export default {
+import { defineConfig } from "drizzle-kit";
+import fs from "node:fs";
+import path from "node:path";
+
+function getLocalD1DB() {
+	try {
+		const basePath = path.resolve(".wrangler");
+		const dbFile = fs
+			.readdirSync(basePath, { encoding: "utf-8", recursive: true })
+			.find((f) => f.endsWith(".sqlite"));
+
+		if (!dbFile) {
+			throw new Error(`.sqlite file not found in ${basePath}`);
+		}
+
+		const url = path.resolve(basePath, dbFile);
+		return url;
+	} catch (err) {
+		console.log(`Error  ${err.message}`);
+	}
+}
+
+export default defineConfig({
 	dialect: "sqlite",
 	schema: "./app/schema.ts",
 	out: "./drizzle/migrations",
-	driver: "d1-http",
-} satisfies Config;
+	...(process.env.NODE_ENV === "production"
+		? {
+				driver: "d1-http",
+				dbCredentials: {
+					databaseId: "3d18d93c-40cc-4257-8014-07be49c91ec3",
+					accountId: process.env.CLOUDFLARE_D1_ACCOUNT_ID,
+					token: process.env.CLOUDFLARE_D1_API_TOKEN,
+				},
+			}
+		: {
+				dbCredentials: {
+					url: getLocalD1DB(),
+				},
+			}),
+});
 ```
 
 ```file:env.d.ts
@@ -1701,6 +1888,18 @@ interface CloudflareEnv {
 }
 ```
 
+```file:lib/db.ts
+import { getRequestContext } from "@cloudflare/next-on-pages";
+import { drizzle } from "drizzle-orm/d1";
+
+export const runtime = "edge";
+
+export const getDb = () => {
+	const d1 = getRequestContext().env.DB;
+	return drizzle(d1);
+};
+```
+
 ```file:lib/utils.ts
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
@@ -1708,6 +1907,87 @@ import { twMerge } from "tailwind-merge"
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
+```
+
+```file:middleware.ts
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { Auth } from "@auth/core";
+import type { Session } from "@auth/core/types";
+import type { JWT } from "@auth/core/jwt";
+import type { AdapterUser } from "@auth/core/adapters";
+import { getAuthConfig } from "@/app/api/[[...route]]/route"; // 認証設定をインポート
+
+type AuthUser = {
+	session: Session;
+	token?: JWT;
+	user?: AdapterUser;
+};
+
+export async function getServerSession(req: NextRequest) {
+	const config = getAuthConfig();
+	config.secret ??= process.env.AUTH_SECRET;
+	config.basePath ??= "/api/auth";
+	config.trustHost = true;
+	const origin = process.env.NEXTAUTH_URL ?? req.nextUrl.origin;
+	const request = new Request(`${origin}${config.basePath}/session`, {
+		headers: { cookie: req.headers.get("cookie") ?? "" },
+	});
+
+	let authUser: AuthUser = {} as AuthUser;
+
+	const response = (await Auth(request, {
+		...config,
+		callbacks: {
+			...config.callbacks,
+			async session(...args) {
+				authUser = args[0];
+				const session =
+					(await config.callbacks?.session?.(...args)) ?? args[0].session;
+				const user = args[0].user ?? args[0].token;
+				return { user, ...session } satisfies Session;
+			},
+		},
+	})) as Response;
+
+	const session = (await response.json()) as Session | null;
+
+	return session?.user ? authUser : null;
+}
+
+export async function middleware(request: NextRequest) {
+	const session = await getServerSession(request);
+
+	// ルートパスの処理
+	if (request.nextUrl.pathname === "/") {
+		if (session) {
+			// 認証済みの場合、ダッシュボードにリダイレクト
+			return NextResponse.redirect(new URL("/dashboard", request.url));
+		} else {
+			// 未認証の場合、ホームページを表示（デフォルトの動作）
+			return NextResponse.next();
+		}
+	}
+
+	// 保護されたルートのリスト
+	const protectedRoutes = ["/dashboard", "/profile", "/settings"];
+
+	if (
+		!session &&
+		protectedRoutes.some((route) => request.nextUrl.pathname.startsWith(route))
+	) {
+		// 未認証で保護されたルートにアクセスした場合、サインインページにリダイレクト
+		const signInUrl = new URL("/signin", request.url);
+		signInUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
+		return NextResponse.redirect(signInUrl);
+	}
+
+	return NextResponse.next();
+}
+
+export const config = {
+	matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};
 ```
 
 ```file:next.config.mjs
@@ -1721,12 +2001,12 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 /** @type {import('next').NextConfig} */
-// const nextConfig = {};
-const nextConfig = {
-  // experimental: {
-  //   runtime: 'edge',
-  // },
-}
+const nextConfig = {};
+// const nextConfig = {
+//   experimental: {
+//     runtime: 'edge',
+//   },
+// }
 
 export default nextConfig;
 ```
@@ -1919,4 +2199,4 @@ migrations_dir = "drizzle/migrations"
 ```
 
 ## Output File Size
-Output file size: 56548 bytes
+Output file size: 64145 bytes

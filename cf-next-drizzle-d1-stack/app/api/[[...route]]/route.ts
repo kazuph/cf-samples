@@ -1,5 +1,5 @@
 import { getRequestContext } from "@cloudflare/next-on-pages";
-import { type Context, Hono } from "hono";
+import { Hono } from "hono";
 import { handle } from "hono/vercel";
 import { cors } from "hono/cors";
 
@@ -7,7 +7,6 @@ import {
 	authHandler,
 	initAuthConfig,
 	verifyAuth,
-	getAuthUser,
 	type AuthConfig,
 } from "@hono/auth-js";
 import Google from "@auth/core/providers/google";
@@ -36,15 +35,10 @@ type Bindings = {
 	DB: D1Database;
 };
 
-export function getAuthConfig(c: Context): AuthConfig {
-	const db = getDb(c);
+export function getAuthConfig(): AuthConfig {
+	const db = getDb();
 	return {
-		adapter: DrizzleAdapter(db, {
-			users,
-			accounts,
-			sessions,
-			verificationTokens,
-		}),
+		adapter: DrizzleAdapter(db),
 		secret: getRequestContext().env.NEXTAUTH_SECRET,
 		providers: [
 			Google({
@@ -77,7 +71,7 @@ const route = app
 		if (!authUser) return c.json({ error: "Unauthorized" }, 401);
 		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
 
-		const db = getDb(c);
+		const db = getDb();
 		const results = await db
 			.select()
 			.from(todos)
@@ -93,7 +87,7 @@ const route = app
 		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
 
 		console.log("authUser: ", authUser);
-		const db = getDb(c);
+		const db = getDb();
 		const { description } = c.req.valid("json");
 		const result = await db
 			.insert(todos)
@@ -110,7 +104,7 @@ const route = app
 			if (!authUser) return c.json({ error: "Unauthorized" }, 401);
 			if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
 
-			const db = getDb(c);
+			const db = getDb();
 			const { id } = c.req.valid("param");
 			const { completed } = c.req.valid("json");
 			const result = await db
@@ -133,7 +127,7 @@ const route = app
 			if (!authUser) return c.json({ error: "Unauthorized" }, 401);
 			if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
 
-			const db = getDb(c);
+			const db = getDb();
 			const { id } = c.req.valid("param");
 			const { description } = c.req.valid("json");
 			const result = await db
@@ -152,7 +146,7 @@ const route = app
 		if (!authUser) return c.json({ error: "Unauthorized" }, 401);
 		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
 
-		const db = getDb(c);
+		const db = getDb();
 		const { id } = c.req.valid("param");
 		const result = await db
 			.delete(todos)
