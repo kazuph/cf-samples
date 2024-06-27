@@ -1,4 +1,6 @@
 ## Tree Output
+.dev.vars.copy
+.env.copy
 .gitignore
 README.md
 app/api/[[...route]]/route.ts
@@ -18,7 +20,6 @@ components/Features.tsx
 components/Footer.tsx
 components/Header.tsx
 components/Hero.tsx
-components/HomeContent.tsx
 components/Pricing.tsx
 components/Todo.tsx
 components/ui/avatar.tsx
@@ -29,8 +30,10 @@ components/ui/dropdown-menu.tsx
 components/ui/form.tsx
 components/ui/input.tsx
 components/ui/label.tsx
+deploy.sh
 drizzle.config.ts
 env.d.ts
+lib/auth.ts
 lib/db.ts
 lib/utils.ts
 middleware.ts
@@ -45,6 +48,18 @@ tailwind.config.ts
 tsconfig.json
 wrangler.toml
 ## Source Code
+```file:.dev.vars.copy
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+AUTH_SECRET=
+AUTH_TRUST_HOST=true
+```
+
+```file:.env.copy
+CLOUDFLARE_D1_ACCOUNT_ID=
+CLOUDFLARE_D1_API_TOKEN=
+```
+
 ```file:.gitignore
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
@@ -65,8 +80,9 @@ wrangler.toml
 /build
 
 # misc
-.DS_Store
+.*DS_Store
 *.pem
+*.txt
 
 # debug
 npm-debug.log*
@@ -164,26 +180,16 @@ Finally, if you also want to see the example work in the deployed application ma
 ```
 
 ```file:app/api/[[...route]]/route.ts
-import { getRequestContext } from "@cloudflare/next-on-pages";
 import { Hono } from "hono";
 import { handle } from "hono/vercel";
 import { cors } from "hono/cors";
 
-import {
-	authHandler,
-	initAuthConfig,
-	verifyAuth,
-	type AuthConfig,
-} from "@hono/auth-js";
-import Google from "@auth/core/providers/google";
+import { authHandler, initAuthConfig, verifyAuth } from "@hono/auth-js";
 
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
-
 import { zValidator } from "@hono/zod-validator";
 
-import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { users, accounts, sessions, verificationTokens } from "@/app/schema";
 import {
 	todos,
 	createTodoSchema,
@@ -194,26 +200,13 @@ import {
 } from "@/app/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
+import { getAuthConfig } from "@/lib/auth";
 
 export const runtime = "edge";
 
 type Bindings = {
 	DB: D1Database;
 };
-
-export function getAuthConfig(): AuthConfig {
-	const db = getDb();
-	return {
-		adapter: DrizzleAdapter(db),
-		secret: getRequestContext().env.NEXTAUTH_SECRET,
-		providers: [
-			Google({
-				clientId: getRequestContext().env.GOOGLE_CLIENT_ID,
-				clientSecret: getRequestContext().env.GOOGLE_CLIENT_SECRET,
-			}),
-		],
-	};
-}
 
 const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
 
@@ -246,13 +239,10 @@ const route = app
 		return c.json(results);
 	})
 	.post("/todos", zValidator("json", createTodoSchema), async (c) => {
-		console.log("POST /todos");
 		const authUser = c.get("authUser");
-		console.log("authUser: ", authUser);
 		if (!authUser) return c.json({ error: "Unauthorized" }, 401);
 		if (!authUser.user) return c.json({ error: "Invalid user" }, 400);
 
-		console.log("authUser: ", authUser);
 		const db = getDb();
 		const { description } = c.req.valid("json");
 		const result = await db
@@ -351,6 +341,7 @@ import Header from '@/components/Header';
 import Todo from '@/components/Todo';
 import Footer from '@/components/Footer';
 
+
 export default function Dashboard() {
   return (
     <div className="flex flex-col min-h-screen">
@@ -359,7 +350,7 @@ export default function Dashboard() {
         <Todo />
       </main>
       <Footer />
-    </div>
+    </div >
   );
 }
 ```
@@ -448,6 +439,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { Suspense } from 'react';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -464,11 +456,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Providers>
-          <main className="flex flex-col min-h-screen">
+        <main className="flex flex-col min-h-screen">
+          <Providers>
             {children}
-          </main>
-        </Providers>
+          </Providers>
+        </main>
       </body>
     </html>
   );
@@ -537,20 +529,21 @@ const styles = {
 ```
 
 ```file:app/page.tsx
-import { getServerSession } from "@/lib/auth";
-import { redirect } from 'next/navigation';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import HomeContent from '@/components/HomeContent';
 
-export const runtime = "edge";
+import Hero from '@/components/Hero';
+import Features from '@/components/Features';
+import Pricing from '@/components/Pricing';
 
 export default async function Home() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
       <div className="flex-grow">
-        <HomeContent />
+        <Hero />
+        <Features />
+        <Pricing />
       </div>
       <Footer />
     </div>
@@ -732,21 +725,19 @@ export default function Features() {
 'use client';
 
 import Link from 'next/link';
-import { useSession } from "@hono/auth-js/react";
+import { usePathname } from 'next/navigation';
 
-export default function Footer() {
-  const { data: session } = useSession();
+function SimpleFooter() {
+  return (
+    <footer className="fixed bottom-0 w-full px-6 py-4 bg-white">
+      <div className="text-sm text-center text-gray-400">
+        © 2023 SaaSLogo. All rights reserved.
+      </div>
+    </footer>
+  );
+}
 
-  if (session) {
-    return (
-      <footer className="fixed bottom-0 w-full px-6 py-4 bg-white">
-        <div className="text-sm text-center text-gray-400">
-          © 2023 SaaSLogo. All rights reserved.
-        </div>
-      </footer>
-    );
-  }
-
+function DetailedFooter() {
   return (
     <footer className="px-6 py-12 text-white bg-gray-800">
       <div className="grid max-w-6xl grid-cols-1 gap-8 mx-auto md:grid-cols-4">
@@ -785,14 +776,23 @@ export default function Footer() {
     </footer>
   );
 }
+
+export default function Footer() {
+  const pathname = usePathname();
+
+  if (pathname === '/') {
+    return <DetailedFooter />;
+  }
+
+  return <SimpleFooter />;
+}
 ```
 
 ```file:components/Header.tsx
-"use client"
-
+'use client'
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-
+import { usePathname } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -803,64 +803,81 @@ import {
 import { signOut, useSession } from '@hono/auth-js/react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-export default function Header() {
+function PublicNavigation() {
   const router = useRouter();
-  const { data: session } = useSession();
 
   const handleAuth = () => {
     router.push('/auth');
   };
+
+  return (
+    <>
+      <nav className="hidden space-x-4 md:flex">
+        <Link href="#features" className="text-gray-600 hover:text-blue-600">Features</Link>
+        <Link href="#pricing" className="text-gray-600 hover:text-blue-600">Pricing</Link>
+        <Link href="#contact" className="text-gray-600 hover:text-blue-600">Contact</Link>
+      </nav>
+      <Button onClick={handleAuth}>ログイン / サインアップ</Button>
+    </>
+  );
+}
+
+function UserNavigation() {
+  const { data: session } = useSession();
 
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/' });
   };
 
   return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="flex items-center space-x-2">
+          <Avatar>
+            <AvatarImage src={session?.user?.image || ''} alt={session?.user?.name || ''} />
+            <AvatarFallback>{session?.user?.name?.[0] || 'U'}</AvatarFallback>
+          </Avatar>
+          <span>{session?.user?.name || session?.user?.email}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem onClick={handleLogout}>
+          Logout
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export default function Header() {
+  const pathname = usePathname();
+
+  return (
     <header className="flex items-center justify-between w-full px-6 py-4 bg-white shadow-sm">
       <Link href="/" className="text-2xl font-bold text-blue-600">SaaSLogo</Link>
-      {!session && (
-        <nav className="hidden space-x-4 md:flex">
-          <Link href="#features" className="text-gray-600 hover:text-blue-600">Features</Link>
-          <Link href="#pricing" className="text-gray-600 hover:text-blue-600">Pricing</Link>
-          <Link href="#contact" className="text-gray-600 hover:text-blue-600">Contact</Link>
-        </nav>
-      )}
-      <div className="flex items-center space-x-4">
-        {session ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center space-x-2">
-                <Avatar>
-                  <AvatarImage src={session.user?.image || ''} alt={session.user?.name || ''} />
-                  <AvatarFallback>{session.user?.name?.[0] || 'U'}</AvatarFallback>
-                </Avatar>
-                <span>{session.user?.name || session.user?.email}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={handleLogout}>
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <Button onClick={handleAuth}>ログイン / サインアップ</Button>
-        )}
-      </div>
+      {pathname === '/' ? <PublicNavigation /> : <UserNavigation />}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="md:hidden">Menu</Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
-          <DropdownMenuItem>
-            <Link href="#features">Features</Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem>
-            <Link href="#pricing">Pricing</Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem>
-            <Link href="#contact">Contact</Link>
-          </DropdownMenuItem>
+          {pathname === '/' ? (
+            <>
+              <DropdownMenuItem>
+                <Link href="#features">Features</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Link href="#pricing">Pricing</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Link href="#contact">Contact</Link>
+              </DropdownMenuItem>
+            </>
+          ) : (
+            <DropdownMenuItem onClick={() => signOut({ callbackUrl: '/' })}>
+              Logout
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
@@ -880,22 +897,6 @@ export default function Hero() {
         <Button size="lg" className="text-blue-600 bg-white hover:bg-blue-50">Get Started for Free</Button>
       </div>
     </section>
-  );
-}
-```
-
-```file:components/HomeContent.tsx
-import Hero from '@/components/Hero';
-import Features from '@/components/Features';
-import Pricing from '@/components/Pricing';
-
-export default function HomeContent() {
-  return (
-    <>
-      <Hero />
-      <Features />
-      <Pricing />
-    </>
   );
 }
 ```
@@ -982,6 +983,7 @@ export const client = hc<AppType>("/");
 interface Todo {
   id: number;
   description: string;
+  userId: string;
   completed: boolean | null;
   createdAt: string | null;
 }
@@ -1001,7 +1003,11 @@ export default function Todo() {
     if (!session) return;
     try {
       const response = await client.api.todos.$get();
-      const data = await response.json();
+      const data: Todo[] | { error: string } = await response.json();
+      if ('error' in data) {
+        console.error('Error fetching todos:', data.error);
+        return;
+      }
       setTodos(data);
     } catch (error) {
       console.error('Error fetching todos:', error);
@@ -1829,6 +1835,27 @@ Label.displayName = LabelPrimitive.Root.displayName
 export { Label }
 ```
 
+```file:deploy.sh
+#!/bin/bash
+set -euo pipefail
+
+# Parse .dev.vars and set secrets
+if [[ ! -f .dev.vars ]]; then
+    echo "File .dev.vars not found!"
+    exit 1
+fi
+while IFS='=' read -r name value
+do
+  # valueの前後のクオートを削除
+  value=$(echo $value | sed -e 's/^"//' -e 's/"$//')
+  echo "-------------------------------------------------------"
+  echo "Setting $name" #: $value"
+  echo $value | npx wrangler pages secret put "$name"
+done < .dev.vars
+
+pnpm run deploy
+```
+
 ```file:drizzle.config.ts
 // drizzle.config.ts
 
@@ -1837,21 +1864,17 @@ import fs from "node:fs";
 import path from "node:path";
 
 function getLocalD1DB() {
-	try {
-		const basePath = path.resolve(".wrangler");
-		const dbFile = fs
-			.readdirSync(basePath, { encoding: "utf-8", recursive: true })
-			.find((f) => f.endsWith(".sqlite"));
+	const basePath = path.resolve(".wrangler");
+	const dbFile = fs
+		.readdirSync(basePath, { encoding: "utf-8", recursive: true })
+		.find((f) => f.endsWith(".sqlite"));
 
-		if (!dbFile) {
-			throw new Error(`.sqlite file not found in ${basePath}`);
-		}
-
-		const url = path.resolve(basePath, dbFile);
-		return url;
-	} catch (err) {
-		console.log(`Error  ${err.message}`);
+	if (!dbFile) {
+		throw new Error(`.sqlite file not found in ${basePath}`);
 	}
+
+	const url = path.resolve(basePath, dbFile);
+	return url;
 }
 
 export default defineConfig({
@@ -1882,9 +1905,31 @@ export default defineConfig({
 interface CloudflareEnv {
 	GOOGLE_CLIENT_ID: string;
 	GOOGLE_CLIENT_SECRET: string;
-	NEXTAUTH_SECRET: string;
-	NEXTAUTH_URL: string;
+	AUTH_SECRET: string;
 	DB: D1Database;
+}
+```
+
+```file:lib/auth.ts
+import { getRequestContext } from "@cloudflare/next-on-pages";
+import Google from "@auth/core/providers/google";
+import type { AuthConfig } from "@hono/auth-js";
+import { getDb } from "@/lib/db";
+
+import { DrizzleAdapter } from "@auth/drizzle-adapter";
+
+export function getAuthConfig(): AuthConfig {
+	const db = getDb();
+	return {
+		adapter: DrizzleAdapter(db),
+		secret: getRequestContext().env.AUTH_SECRET,
+		providers: [
+			Google({
+				clientId: getRequestContext().env.GOOGLE_CLIENT_ID,
+				clientSecret: getRequestContext().env.GOOGLE_CLIENT_SECRET,
+			}),
+		],
+	};
 }
 ```
 
@@ -1916,7 +1961,7 @@ import { Auth } from "@auth/core";
 import type { Session } from "@auth/core/types";
 import type { JWT } from "@auth/core/jwt";
 import type { AdapterUser } from "@auth/core/adapters";
-import { getAuthConfig } from "@/app/api/[[...route]]/route"; // 認証設定をインポート
+import { getAuthConfig } from "@/lib/auth";
 
 type AuthUser = {
 	session: Session;
@@ -1929,7 +1974,10 @@ export async function getServerSession(req: NextRequest) {
 	config.secret ??= process.env.AUTH_SECRET;
 	config.basePath ??= "/api/auth";
 	config.trustHost = true;
-	const origin = process.env.NEXTAUTH_URL ?? req.nextUrl.origin;
+	const origin = req.nextUrl.origin;
+	console.log({
+		origin,
+	});
 	const request = new Request(`${origin}${config.basePath}/session`, {
 		headers: { cookie: req.headers.get("cookie") ?? "" },
 	});
@@ -1957,29 +2005,23 @@ export async function getServerSession(req: NextRequest) {
 
 export async function middleware(request: NextRequest) {
 	const session = await getServerSession(request);
+	const { pathname } = request.nextUrl;
 
-	// ルートパスの処理
-	if (request.nextUrl.pathname === "/") {
-		if (session) {
-			// 認証済みの場合、ダッシュボードにリダイレクト
-			return NextResponse.redirect(new URL("/dashboard", request.url));
-		} else {
-			// 未認証の場合、ホームページを表示（デフォルトの動作）
-			return NextResponse.next();
-		}
+	if (pathname.startsWith("/api")) {
+		return NextResponse.next();
 	}
 
-	// 保護されたルートのリスト
-	const protectedRoutes = ["/dashboard", "/profile", "/settings"];
+	if (session && pathname === "/") {
+		return NextResponse.redirect(new URL("/dashboard", request.url));
+	}
 
 	if (
 		!session &&
-		protectedRoutes.some((route) => request.nextUrl.pathname.startsWith(route))
+		pathname !== "/" &&
+		pathname !== "/auth" &&
+		pathname !== "/404"
 	) {
-		// 未認証で保護されたルートにアクセスした場合、サインインページにリダイレクト
-		const signInUrl = new URL("/signin", request.url);
-		signInUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
-		return NextResponse.redirect(signInUrl);
+		return NextResponse.redirect(new URL("/404", request.url));
 	}
 
 	return NextResponse.next();
@@ -2199,4 +2241,4 @@ migrations_dir = "drizzle/migrations"
 ```
 
 ## Output File Size
-Output file size: 64145 bytes
+Output file size: 64402 bytes

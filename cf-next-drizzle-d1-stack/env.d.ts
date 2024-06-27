@@ -4,7 +4,6 @@
 interface CloudflareEnv {
 	GOOGLE_CLIENT_ID: string;
 	GOOGLE_CLIENT_SECRET: string;
-	NEXTAUTH_SECRET: string;
-	NEXTAUTH_URL: string;
+	AUTH_SECRET: string;
 	DB: D1Database;
 }

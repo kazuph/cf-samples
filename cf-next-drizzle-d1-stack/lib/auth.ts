@@ -9,7 +9,7 @@ export function getAuthConfig(): AuthConfig {
 	const db = getDb();
 	return {
 		adapter: DrizzleAdapter(db),
-		secret: getRequestContext().env.NEXTAUTH_SECRET,
+		secret: getRequestContext().env.AUTH_SECRET,
 		providers: [
 			Google({
 				clientId: getRequestContext().env.GOOGLE_CLIENT_ID,

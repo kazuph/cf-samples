@@ -14,10 +14,13 @@ type AuthUser = {
 
 export async function getServerSession(req: NextRequest) {
 	const config = getAuthConfig();
-	config.secret ??= process.env.NEXTAUTH_SECRET;
+	config.secret ??= process.env.AUTH_SECRET;
 	config.basePath ??= "/api/auth";
 	config.trustHost = true;
-	const origin = process.env.NEXTAUTH_URL ?? req.nextUrl.origin;
+	const origin = req.nextUrl.origin;
+	console.log({
+		origin,
+	});
 	const request = new Request(`${origin}${config.basePath}/session`, {
 		headers: { cookie: req.headers.get("cookie") ?? "" },
 	});

@@ -10,6 +10,8 @@
 		"pages:dev": "npx wrangler pages dev .next",
 		"pages:build": "npx @cloudflare/next-on-pages",
 		"preview": "wrangler pages dev",
+		"studio:local": "drizzle-kit studio",
+		"studio:remote": "NODE_ENV=production drizzle-kit studio",
 		"migration:generate": "drizzle-kit generate",
 		"migration:apply:local": "wrangler d1 migrations apply d1-todo --local",
 		"migration:apply:remote": "wrangler d1 migrations apply d1-todo --remote",

@@ -12,7 +12,7 @@ do
   value=$(echo $value | sed -e 's/^"//' -e 's/"$//')
   echo "-------------------------------------------------------"
   echo "Setting $name" #: $value"
-  echo $value | npx wrangler secret put "$name"
+  echo $value | npx wrangler pages secret put "$name"
 done < .dev.vars
 
 pnpm run deploy
